@@ -1,0 +1,1201 @@
+<title>Reading the Bivariate Gaussian</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<style>
+  :root {
+    --paper:      #eceff0;
+    --surface:    #f8fafa;
+    --surface-2:  #e2e7e8;
+    --ink:        #11181c;
+    --ink-soft:   #35444b;
+    --muted:      #5b6a70;
+    --rule:       #c8d1d3;
+    --rule-soft:  #d9e0e1;
+    --teal:       #0f6f6a;
+    --teal-deep:  #0d3552;
+    --amber:      #b2500a;
+    --amber-soft: #f0d9c2;
+    --violet:     #5f45a6;
+    --good:       #1d6b4a;
+    --bad:        #9b2f28;
+
+    /* plot ramp, low -> high density */
+    --ramp0: #edf1f1;
+    --ramp1: #bcdcd6;
+    --ramp2: #56aba2;
+    --ramp3: #1a6f76;
+    --ramp4: #0d3552;
+    --grid:  #b9c4c6;
+
+    --f-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    --f-body:    "Newsreader", Georgia, "Times New Roman", serif;
+    --f-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0d1418;
+      --surface:    #141d22;
+      --surface-2:  #1d282e;
+      --ink:        #e6eced;
+      --ink-soft:   #c3cfd2;
+      --muted:      #8ea0a5;
+      --rule:       #2b383e;
+      --rule-soft:  #223036;
+      --teal:       #5cc0b2;
+      --teal-deep:  #8fd8e6;
+      --amber:      #eb9a53;
+      --amber-soft: #4a2f18;
+      --violet:     #a893ea;
+      --good:       #62c493;
+      --bad:        #e58a80;
+
+      --ramp0: #0e161a;
+      --ramp1: #133c45;
+      --ramp2: #1f7d7a;
+      --ramp3: #58bda6;
+      --ramp4: #d6ecdb;
+      --grid:  #33454c;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:      #0d1418;
+    --surface:    #141d22;
+    --surface-2:  #1d282e;
+    --ink:        #e6eced;
+    --ink-soft:   #c3cfd2;
+    --muted:      #8ea0a5;
+    --rule:       #2b383e;
+    --rule-soft:  #223036;
+    --teal:       #5cc0b2;
+    --teal-deep:  #8fd8e6;
+    --amber:      #eb9a53;
+    --amber-soft: #4a2f18;
+    --violet:     #a893ea;
+    --good:       #62c493;
+    --bad:        #e58a80;
+
+    --ramp0: #0e161a;
+    --ramp1: #133c45;
+    --ramp2: #1f7d7a;
+    --ramp3: #58bda6;
+    --ramp4: #d6ecdb;
+    --grid:  #33454c;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1220px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 40px 72px;
+  }
+
+  /* ---------- header ---------- */
+  header.masthead { border-bottom: 1px solid var(--rule); padding-bottom: 26px; margin-bottom: 30px; }
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: clamp(32px, 5.4vw, 52px);
+    line-height: 1.02;
+    letter-spacing: -.02em;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 18.5px;
+    color: var(--ink-soft);
+  }
+  .standfirst em { font-style: italic; }
+
+  /* ---------- layout ---------- */
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1.42fr) minmax(0, .82fr);
+    gap: 34px;
+    align-items: start;
+  }
+  @media (max-width: 960px) { .cols { grid-template-columns: 1fr; gap: 28px; } }
+
+  .stack { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+
+  .rail { position: sticky; top: 20px; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  @media (max-width: 960px) { .rail { position: static; } }
+
+  /* ---------- panels ---------- */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+  }
+  .panel-pad { padding: 20px 22px 22px; }
+
+  h2.sec {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  h3 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: 19px;
+    letter-spacing: -.01em;
+    margin: 0 0 8px;
+  }
+  p { margin: 0 0 12px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ---------- plot ---------- */
+  .plot-shell { padding: 14px 14px 8px; }
+  canvas#plot {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    touch-action: none;
+    cursor: crosshair;
+    border-radius: 2px;
+  }
+  .plot-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    padding: 12px 8px 8px;
+    border-top: 1px solid var(--rule-soft);
+    margin-top: 10px;
+  }
+  .key {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: .03em;
+    color: var(--muted);
+  }
+  .swatch { width: 15px; height: 3px; border-radius: 2px; flex: none; }
+  .swatch.dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ---------- controls ---------- */
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  button {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    letter-spacing: .05em;
+    color: var(--ink-soft);
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 7px 12px;
+    cursor: pointer;
+    transition: background .14s ease, color .14s ease, border-color .14s ease;
+  }
+  button:hover { border-color: var(--teal); color: var(--teal); }
+  button[aria-pressed="true"] {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: var(--surface);
+  }
+  button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 2px;
+  }
+
+  .sliders {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px 26px;
+  }
+  .ctl { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 10px; }
+  .ctl label {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+    letter-spacing: .02em;
+  }
+  .ctl .val {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--teal);
+  }
+  .ctl input[type="range"] { grid-column: 1 / -1; width: 100%; margin: 2px 0 0; accent-color: var(--teal); }
+  .ctl.slice label { color: var(--amber); }
+  .ctl.slice .val { color: var(--amber); }
+  .ctl.slice input[type="range"] { accent-color: var(--amber); }
+
+  /* ---------- numbers ---------- */
+  .numbers {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 20px 26px;
+  }
+  .nblock { min-width: 0; }
+  .nlabel {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 7px;
+  }
+  .matrix {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    gap: 2px 14px;
+    font-family: var(--f-mono);
+    font-size: 13.5px;
+    font-variant-numeric: tabular-nums;
+    padding: 5px 12px;
+    border-left: 2px solid var(--teal);
+    border-right: 2px solid var(--teal);
+    color: var(--ink);
+  }
+  .matrix span { text-align: right; }
+  .rows { font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .rows div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border-bottom: 1px dotted var(--rule-soft); }
+  .rows div:last-child { border-bottom: 0; }
+  .rows .k { color: var(--muted); }
+  .rows .v { color: var(--ink); }
+  .rows .v.hot { color: var(--amber); }
+
+  /* ---------- prose notes ---------- */
+  .note + .note { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--rule-soft); }
+  .note p { font-size: 16px; color: var(--ink-soft); }
+  .note .tag {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--teal);
+    display: block;
+    margin-bottom: 5px;
+  }
+  code, .m {
+    font-family: var(--f-mono);
+    font-size: .88em;
+    color: var(--ink);
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  /* ---------- quiz ---------- */
+  .quiz { border-color: var(--rule); }
+  .quiz-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--surface-2);
+  }
+  .quiz-head .t {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -.01em;
+  }
+  .quiz-head .score {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    letter-spacing: .05em;
+  }
+  .quiz-head .right { display: flex; align-items: center; gap: 10px; flex: none; }
+
+  /* sync switch */
+  .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .06em;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+  .switch .track {
+    width: 26px; height: 14px;
+    border-radius: 8px;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    position: relative;
+    flex: none;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .switch .track::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: transform .15s ease, background .15s ease;
+  }
+  .switch[aria-pressed="true"] { color: var(--amber); }
+  .switch[aria-pressed="true"] .track { background: var(--amber-soft); border-color: var(--amber); }
+  .switch[aria-pressed="true"] .track::after { transform: translateX(12px); background: var(--amber); }
+  .switch:hover { color: var(--ink-soft); }
+  .switch[aria-pressed="true"]:hover { color: var(--amber); }
+
+  .scenario {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    flex-wrap: wrap;
+    margin: -4px 0 14px;
+  }
+  .scenario .setup {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    letter-spacing: .02em;
+  }
+  .quiz-body { padding: 18px; }
+  .qmeta {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 9px;
+  }
+  .qtext { font-size: 16.5px; margin: 0 0 14px; }
+  .qtext .m { font-size: .85em; }
+  .opts { display: flex; flex-direction: column; gap: 7px; }
+  .opt {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    text-align: left;
+    font-family: var(--f-body);
+    font-size: 15.5px;
+    letter-spacing: 0;
+    line-height: 1.45;
+    padding: 9px 12px;
+    color: var(--ink-soft);
+    background: transparent;
+    border: 1px solid var(--rule);
+  }
+  .opt .mark {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding-top: 3px;
+    flex: none;
+  }
+  .opt:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); border-color: var(--teal); }
+  .opt:disabled { cursor: default; opacity: 1; }
+  .opt.correct { border-color: var(--good); color: var(--good); background: transparent; }
+  .opt.correct .mark { color: var(--good); }
+  .opt.wrong { border-color: var(--bad); color: var(--bad); }
+  .opt.wrong .mark { color: var(--bad); }
+  .explain {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-left: 2px solid var(--amber);
+    background: var(--surface-2);
+    font-size: 15.5px;
+    color: var(--ink-soft);
+  }
+  .explain strong { color: var(--ink); font-weight: 500; }
+  .quiz-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; }
+  .quiz-foot .hintline { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+
+  .try {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: var(--amber);
+    background: none;
+    border: 0;
+    border-bottom: 1px dashed var(--amber);
+    border-radius: 0;
+    padding: 0 0 1px;
+    cursor: pointer;
+  }
+  .try:hover { color: var(--amber); border-bottom-style: solid; }
+
+  footer.colophon {
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: var(--muted);
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Murphy · PML Ch. 3.2 · multivariate normal</p>
+    <h1>Reading the Bivariate Gaussian</h1>
+    <p class="standfirst">Every symbol in <span class="m">N(y | μ, Σ)</span> has a shape you can see. Move the five numbers below and watch the ellipse turn, the axes stretch, and the conditional slice snap into place — <em>that</em> is what the algebra in equations 3.16&ndash;3.32 is describing.</p>
+  </header>
+
+  <div class="cols">
+    <div class="stack">
+
+      <section class="panel plot-shell" aria-label="Interactive bivariate Gaussian density">
+        <canvas id="plot" width="1300" height="1300" role="img"
+                aria-label="Density plot of a two dimensional Gaussian with marginal distributions along the top and right edges and a conditional slice."></canvas>
+        <div class="plot-foot">
+          <span class="key"><span class="swatch" style="background:var(--teal-deep)"></span>Mahalanobis Δ = 1, 2, 3</span>
+          <span class="key"><span class="swatch" style="background:var(--violet)"></span>eigenvectors u₁, u₂ (scaled by √λ)</span>
+          <span class="key"><span class="swatch" style="background:var(--amber)"></span>slice Y₂ = y₂ → p(y₁|y₂)</span>
+          <span class="key"><span class="swatch dot" style="background:var(--muted)"></span>samples</span>
+        </div>
+      </section>
+
+      <section class="panel panel-pad">
+        <h2 class="sec">Covariance shape</h2>
+        <div class="presets" id="presets">
+          <button data-preset="full" aria-pressed="true">full — tilted ellipse</button>
+          <button data-preset="diag" aria-pressed="false">diagonal — axis-aligned</button>
+          <button data-preset="sph" aria-pressed="false">spherical — circle</button>
+          <button data-preset="anti" aria-pressed="false">negative ρ</button>
+          <button id="toggleSamples" aria-pressed="false">show 250 samples</button>
+        </div>
+
+        <h2 class="sec">Parameters</h2>
+        <div class="sliders">
+          <div class="ctl"><label for="mu1">μ₁ &nbsp;mean of Y₁</label><span class="val" id="mu1v">0.00</span>
+            <input type="range" id="mu1" min="-2.5" max="2.5" step="0.05" value="0"></div>
+          <div class="ctl"><label for="mu2">μ₂ &nbsp;mean of Y₂</label><span class="val" id="mu2v">0.00</span>
+            <input type="range" id="mu2" min="-2.5" max="2.5" step="0.05" value="0"></div>
+          <div class="ctl"><label for="s1">σ₁ &nbsp;spread of Y₁</label><span class="val" id="s1v">1.00</span>
+            <input type="range" id="s1" min="0.3" max="2.4" step="0.02" value="1"></div>
+          <div class="ctl"><label for="s2">σ₂ &nbsp;spread of Y₂</label><span class="val" id="s2v">1.00</span>
+            <input type="range" id="s2" min="0.3" max="2.4" step="0.02" value="1"></div>
+          <div class="ctl"><label for="rho">ρ &nbsp;correlation</label><span class="val" id="rhov">0.80</span>
+            <input type="range" id="rho" min="-0.95" max="0.95" step="0.01" value="0.8"></div>
+          <div class="ctl slice"><label for="y2">y₂ &nbsp;observed value (drag the plot)</label><span class="val" id="y2v">1.00</span>
+            <input type="range" id="y2" min="-4" max="4" step="0.05" value="1"></div>
+        </div>
+      </section>
+
+      <section class="panel panel-pad">
+        <h2 class="sec">What the numbers say right now</h2>
+        <div class="numbers">
+          <div class="nblock">
+            <div class="nlabel">Σ &nbsp;covariance (eq. 3.16)</div>
+            <div class="matrix">
+              <span id="S11">1.00</span><span id="S12">0.80</span>
+              <span id="S21">0.80</span><span id="S22">1.00</span>
+            </div>
+          </div>
+          <div class="nblock">
+            <div class="nlabel">Eigen-decomposition (eq. 3.21)</div>
+            <div class="rows">
+              <div><span class="k">λ₁ (long axis)</span><span class="v" id="lam1">1.80</span></div>
+              <div><span class="k">λ₂ (short axis)</span><span class="v" id="lam2">0.20</span></div>
+              <div><span class="k">tilt of u₁</span><span class="v" id="tilt">45.0°</span></div>
+              <div><span class="k">|Σ|</span><span class="v" id="det">0.360</span></div>
+            </div>
+          </div>
+          <div class="nblock">
+            <div class="nlabel">Slice at Y₂ = y₂ (eq. 3.31)</div>
+            <div class="rows">
+              <div><span class="k">E[Y₁ | y₂]</span><span class="v hot" id="cmean">0.80</span></div>
+              <div><span class="k">V[Y₁ | y₂]</span><span class="v hot" id="cvar">0.36</span></div>
+              <div><span class="k">V[Y₁] &nbsp;(marginal)</span><span class="v" id="mvar">1.00</span></div>
+              <div><span class="k">uncertainty removed</span><span class="v" id="shrink">64%</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel panel-pad">
+        <h2 class="sec">Four things to try</h2>
+
+        <div class="note">
+          <span class="tag">01 · the ellipse is Σ's eigenvectors</span>
+          <p>Contours are level sets of the Mahalanobis distance <span class="m">Δ² = (y−μ)ᵀΣ⁻¹(y−μ)</span> (eq. 3.20). Rewrite it in the rotated frame <span class="m">z = U(y−μ)</span> and it becomes <span class="m">z₁²/λ₁ + z₂²/λ₂</span> — a plain ellipse. The violet arrows are <span class="m">√λ₁u₁</span> and <span class="m">√λ₂u₂</span>: eigen<em>vectors</em> set the tilt, eigen<em>values</em> set the elongation. <button class="try" data-do="tilt">Swing ρ from −0.9 to +0.9</button> and watch the arrows rotate while the ellipse keeps the same area.</p>
+        </div>
+
+        <div class="note">
+          <span class="tag">02 · marginal = project, conditional = slice</span>
+          <p>The grey curve on the top edge is the marginal <span class="m">p(y₁) = N(μ₁, σ₁²)</span> — the whole hill flattened onto the y₁ axis, which is why you just read off Σ's diagonal. The amber curve is the conditional <span class="m">p(y₁|y₂)</span>: a vertical cut through the hill at the amber line, renormalized. Projecting keeps everything; slicing throws most of it away.</p>
+        </div>
+
+        <div class="note">
+          <span class="tag">03 · knowing y₂ moves and narrows y₁</span>
+          <p><span class="m">E[Y₁|y₂] = μ₁ + ρ(σ₁/σ₂)(y₂−μ₂)</span> slides the amber peak along a line as you drag; <span class="m">V[Y₁|y₂] = σ₁²(1−ρ²)</span> never depends on <em>which</em> y₂ you saw — only on how strong the correlation is. <button class="try" data-do="drag">Drag the slice up and down</button>: the amber curve translates but never changes width. That constant width is the whole idea behind missing-value imputation in §3.2.5.</p>
+        </div>
+
+        <div class="note">
+          <span class="tag">04 · ρ = 0 breaks the link</span>
+          <p><button class="try" data-do="zero">Set ρ = 0</button> and the amber curve lands exactly on the grey one, wherever you put the slice. For jointly Gaussian variables, uncorrelated really does mean independent — observing Y₂ tells you nothing. Push ρ toward ±0.95 instead and the conditional collapses to a spike: Y₁ is nearly determined by Y₂.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= RAIL ================= -->
+    <aside class="rail">
+      <section class="panel quiz">
+        <div class="quiz-head">
+          <span class="t">Check yourself</span>
+          <span class="right">
+            <button class="switch" id="sync" aria-pressed="true" title="When on, answering a question sets the plot to that question's numbers.">
+              <span class="track"></span>auto-set plot
+            </button>
+            <span class="score" id="score">0 / 0</span>
+          </span>
+        </div>
+        <div class="quiz-body">
+          <div class="qmeta" id="qmeta">Question 1 of 7</div>
+          <p class="qtext" id="qtext"></p>
+          <div class="scenario" id="scenario" hidden>
+            <button class="try" id="applyBtn"></button>
+            <span class="setup" id="setup"></span>
+          </div>
+          <div class="opts" id="opts"></div>
+          <div id="explain"></div>
+          <div class="quiz-foot">
+            <span class="hintline" id="hintline">pick an answer</span>
+            <button id="next" hidden>next →</button>
+            <button id="restart" hidden>start over</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel panel-pad">
+        <h2 class="sec">The density itself</h2>
+        <p style="font-family:var(--f-mono);font-size:12.5px;line-height:1.75;color:var(--ink-soft);margin:0 0 12px">
+          p(y₁,y₂) =<br>
+          &nbsp;&nbsp;1 / (2πσ₁σ₂√(1−ρ²))<br>
+          &nbsp;&nbsp;× exp{ −1/(2(1−ρ²)) ×<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;[ (y₁−μ₁)²/σ₁²<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;+ (y₂−μ₂)²/σ₂²<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;− 2ρ(y₁−μ₁)(y₂−μ₂)/(σ₁σ₂) ] }
+        </p>
+        <p style="font-size:15.5px;color:var(--ink-soft);margin:0">Equation 3.18, and it is less intimidating than it looks: the bracket is just the squared Mahalanobis distance written out, the <span class="m">−2ρ(···)</span> cross-term is the only thing a diagonal Σ lacks, and everything in front is the normalizer <span class="m">Z = 2π|Σ|^(1/2)</span> that makes it integrate to 1.</p>
+      </section>
+
+      <section class="panel panel-pad">
+        <h2 class="sec">Parameter count</h2>
+        <div class="rows">
+          <div><span class="k">full Σ</span><span class="v">D(D+1)/2 = 3</span></div>
+          <div><span class="k">diagonal Σ</span><span class="v">D = 2</span></div>
+          <div><span class="k">spherical σ²I</span><span class="v">1</span></div>
+        </div>
+        <p style="font-size:15px;color:var(--muted);margin:12px 0 0">For D = 2. In D dimensions a full covariance costs D(D+1)/2 parameters — quadratic growth is exactly why diagonal and spherical approximations show up everywhere in practice.</p>
+      </section>
+    </aside>
+  </div>
+
+  <footer class="colophon">Built against Kevin P. Murphy, <em>Probabilistic Machine Learning: An Introduction</em>, §3.2 — equations 3.11, 3.16&ndash;3.21, 3.28, 3.31.</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- state ----------
+  var P = { mu1: 0, mu2: 0, s1: 1, s2: 1, rho: 0.8, y2: 1 };
+  var showSamples = false;
+
+  // fixed standard-normal pairs so samples morph coherently with the params
+  var Z = (function () {
+    var a = [], seed = 20250914;
+    function rnd() { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }
+    for (var i = 0; i < 250; i++) {
+      var u1 = Math.max(rnd(), 1e-9), u2 = rnd(), r = Math.sqrt(-2 * Math.log(u1));
+      a.push([r * Math.cos(2 * Math.PI * u2), r * Math.sin(2 * Math.PI * u2)]);
+    }
+    return a;
+  })();
+
+  // ---------- canvas geometry (logical units; canvas is 2x for retina) ----------
+  var SC = 2;
+  var W = 650, H = 650;
+  var PADL = 46, PADB = 44, STRIPT = 78, STRIPR = 78, MARG = 14;
+  var PX = PADL, PY = MARG + STRIPT;
+  var PW = W - PADL - STRIPR - MARG;
+  var PH = H - PY - PADB;
+  var XMIN = -4.6, XMAX = 4.6, YMIN = -4.6, YMAX = 4.6;
+
+  var cv = document.getElementById("plot");
+  var ctx = cv.getContext("2d");
+  var grid = document.createElement("canvas");
+  var GN = 180;
+  grid.width = GN; grid.height = GN;
+  var gctx = grid.getContext("2d");
+  var gimg = gctx.createImageData(GN, GN);
+
+  function mx(x) { return PX + (x - XMIN) / (XMAX - XMIN) * PW; }
+  function my(y) { return PY + PH - (y - YMIN) / (YMAX - YMIN) * PH; }
+  function inv_y(py) { return YMIN + (PY + PH - py) / PH * (YMAX - YMIN); }
+
+  function css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+  function hex(h) {
+    h = h.replace("#", "");
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+
+  // ---------- math ----------
+  function eig(a, b, c) {                       // symmetric [[a,b],[b,c]]
+    var tr = a + c, dt = a * c - b * b;
+    var disc = Math.sqrt(Math.max(tr * tr / 4 - dt, 0));
+    var l1 = tr / 2 + disc, l2 = tr / 2 - disc;
+    var v1;
+    if (Math.abs(b) > 1e-9) { v1 = [b, l1 - a]; }
+    else { v1 = a >= c ? [1, 0] : [0, 1]; }
+    var n = Math.hypot(v1[0], v1[1]) || 1;
+    v1 = [v1[0] / n, v1[1] / n];
+    return { l1: l1, l2: Math.max(l2, 1e-9), v1: v1, v2: [-v1[1], v1[0]] };
+  }
+
+  function normal(x, m, v) {
+    return Math.exp(-(x - m) * (x - m) / (2 * v)) / Math.sqrt(2 * Math.PI * v);
+  }
+
+  function derived() {
+    var s1 = P.s1, s2 = P.s2, r = P.rho;
+    var S12 = r * s1 * s2;
+    var e = eig(s1 * s1, S12, s2 * s2);
+    var cm = P.mu1 + r * (s1 / s2) * (P.y2 - P.mu2);
+    var cv_ = s1 * s1 * (1 - r * r);
+    return { S12: S12, e: e, cmean: cm, cvar: cv_, det: s1 * s1 * s2 * s2 * (1 - r * r) };
+  }
+
+  // ---------- drawing ----------
+  function draw() {
+    var d = derived();
+    var s1 = P.s1, s2 = P.s2, r = P.rho, m1 = P.mu1, m2 = P.mu2;
+    var one_r2 = 1 - r * r;
+
+    ctx.setTransform(SC, 0, 0, SC, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = css("--surface");
+    ctx.fillRect(0, 0, W, H);
+
+    // ---- density raster ----
+    var ramp = [hex(css("--ramp0")), hex(css("--ramp1")), hex(css("--ramp2")), hex(css("--ramp3")), hex(css("--ramp4"))];
+    var data = gimg.data;
+    for (var j = 0; j < GN; j++) {
+      var yv = YMAX - (j + 0.5) / GN * (YMAX - YMIN);
+      var dy = (yv - m2) / s2;
+      for (var i = 0; i < GN; i++) {
+        var xv = XMIN + (i + 0.5) / GN * (XMAX - XMIN);
+        var dx = (xv - m1) / s1;
+        var q = (dx * dx + dy * dy - 2 * r * dx * dy) / one_r2;   // Mahalanobis squared
+        var t = Math.pow(Math.exp(-0.5 * q), 0.42);               // relative to peak, gamma'd
+        var u = t * 4, k = Math.min(3, Math.floor(u)), f = u - k;
+        var A = ramp[k], B = ramp[k + 1];
+        var o = (j * GN + i) * 4;
+        data[o] = A[0] + (B[0] - A[0]) * f;
+        data[o + 1] = A[1] + (B[1] - A[1]) * f;
+        data[o + 2] = A[2] + (B[2] - A[2]) * f;
+        data[o + 3] = 255;
+      }
+    }
+    gctx.putImageData(gimg, 0, 0);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(PX, PY, PW, PH); ctx.clip();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(grid, PX, PY, PW, PH);
+
+    // ---- grid lines ----
+    ctx.strokeStyle = css("--grid");
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 0.6;
+    for (var g = -4; g <= 4; g += 2) {
+      ctx.beginPath(); ctx.moveTo(mx(g), PY); ctx.lineTo(mx(g), PY + PH); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(PX, my(g)); ctx.lineTo(PX + PW, my(g)); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // ---- samples ----
+    if (showSamples) {
+      var L21 = r * s2, L22 = s2 * Math.sqrt(one_r2);
+      ctx.fillStyle = css("--muted");
+      ctx.globalAlpha = 0.55;
+      for (var k2 = 0; k2 < Z.length; k2++) {
+        var z1 = Z[k2][0], z2 = Z[k2][1];
+        var px = m1 + s1 * z1, py = m2 + L21 * z1 + L22 * z2;
+        ctx.beginPath(); ctx.arc(mx(px), my(py), 1.9, 0, 6.2832); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ---- Mahalanobis contours ----
+    var e = d.e, sq1 = Math.sqrt(e.l1), sq2 = Math.sqrt(e.l2);
+    ctx.strokeStyle = css("--teal-deep");
+    for (var rr = 1; rr <= 3; rr++) {
+      ctx.globalAlpha = 0.75 - (rr - 1) * 0.18;
+      ctx.lineWidth = rr === 1 ? 1.9 : 1.2;
+      ctx.beginPath();
+      for (var t2 = 0; t2 <= 64; t2++) {
+        var th = t2 / 64 * 6.2831853;
+        var ex = m1 + rr * (sq1 * e.v1[0] * Math.cos(th) + sq2 * e.v2[0] * Math.sin(th));
+        var ey = m2 + rr * (sq1 * e.v1[1] * Math.cos(th) + sq2 * e.v2[1] * Math.sin(th));
+        t2 ? ctx.lineTo(mx(ex), my(ey)) : ctx.moveTo(mx(ex), my(ey));
+      }
+      ctx.closePath(); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // ---- eigenvector arrows ----
+    ctx.strokeStyle = css("--violet");
+    ctx.fillStyle = css("--violet");
+    ctx.lineWidth = 1.8;
+    arrow(m1, m2, m1 + sq1 * e.v1[0], m2 + sq1 * e.v1[1]);
+    arrow(m1, m2, m1 + sq2 * e.v2[0], m2 + sq2 * e.v2[1]);
+
+    // ---- conditional mean line E[y1|y2] = m1 + r s1/s2 (y2 - m2) ----
+    ctx.strokeStyle = css("--amber");
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath();
+    ctx.moveTo(mx(m1 + r * (s1 / s2) * (YMIN - m2)), my(YMIN));
+    ctx.lineTo(mx(m1 + r * (s1 / s2) * (YMAX - m2)), my(YMAX));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    // ---- slice line ----
+    ctx.strokeStyle = css("--amber");
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(PX, my(P.y2)); ctx.lineTo(PX + PW, my(P.y2)); ctx.stroke();
+
+    // mean marker
+    ctx.strokeStyle = css("--surface");
+    ctx.lineWidth = 3;
+    cross(mx(m1), my(m2), 6);
+    ctx.strokeStyle = css("--ink");
+    ctx.lineWidth = 1.4;
+    cross(mx(m1), my(m2), 6);
+
+    ctx.restore();
+
+    // plot frame
+    ctx.strokeStyle = css("--rule");
+    ctx.lineWidth = 1;
+    ctx.strokeRect(PX + 0.5, PY + 0.5, PW - 1, PH - 1);
+
+    // ---- top strip: marginal p(y1) vs conditional p(y1|y2) ----
+    var peakM = normal(m1, m1, s1 * s1);
+    var peakC = normal(d.cmean, d.cmean, d.cvar);
+    var peak = Math.max(peakM, peakC);
+    var sy = (STRIPT - 12) / peak;
+    var base = MARG + STRIPT - 4;
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(PX, MARG - 2, PW, STRIPT); ctx.clip();
+
+    // marginal (grey, filled faintly)
+    ctx.beginPath();
+    for (var a1 = 0; a1 <= 140; a1++) {
+      var xa = XMIN + a1 / 140 * (XMAX - XMIN);
+      var ya = base - normal(xa, m1, s1 * s1) * sy;
+      a1 ? ctx.lineTo(mx(xa), ya) : ctx.moveTo(mx(xa), ya);
+    }
+    ctx.strokeStyle = css("--muted");
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // conditional (amber, filled)
+    ctx.beginPath();
+    ctx.moveTo(mx(XMIN), base);
+    for (var a2 = 0; a2 <= 200; a2++) {
+      var xb = XMIN + a2 / 200 * (XMAX - XMIN);
+      ctx.lineTo(mx(xb), base - normal(xb, d.cmean, d.cvar) * sy);
+    }
+    ctx.lineTo(mx(XMAX), base);
+    ctx.closePath();
+    ctx.fillStyle = css("--amber-soft");
+    ctx.globalAlpha = 0.75; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = css("--amber");
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.strokeStyle = css("--rule-soft");
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PX, base); ctx.lineTo(PX + PW, base); ctx.stroke();
+    ctx.restore();
+
+    label("p(y₁) marginal", PX + 4, MARG + 9, css("--muted"), "left");
+    label("p(y₁ | y₂) conditional", PX + PW - 4, MARG + 9, css("--amber"), "right");
+
+    // ---- right strip: marginal p(y2) ----
+    var peak2 = normal(m2, m2, s2 * s2);
+    var sx = (STRIPR - 22) / peak2;
+    var bx = W - STRIPR - MARG + 6;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(bx - 2, PY, STRIPR, PH); ctx.clip();
+    ctx.beginPath();
+    ctx.moveTo(bx, my(YMIN));
+    for (var b1 = 0; b1 <= 200; b1++) {
+      var yb = YMIN + b1 / 200 * (YMAX - YMIN);
+      ctx.lineTo(bx + normal(yb, m2, s2 * s2) * sx, my(yb));
+    }
+    ctx.lineTo(bx, my(YMAX));
+    ctx.closePath();
+    ctx.fillStyle = css("--surface-2"); ctx.fill();
+    ctx.strokeStyle = css("--muted"); ctx.lineWidth = 1.4; ctx.stroke();
+
+    // observed y2 marker
+    ctx.strokeStyle = css("--amber"); ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(bx, my(P.y2));
+    ctx.lineTo(bx + normal(P.y2, m2, s2 * s2) * sx, my(P.y2));
+    ctx.stroke();
+    ctx.fillStyle = css("--amber");
+    ctx.beginPath(); ctx.arc(bx + normal(P.y2, m2, s2 * s2) * sx, my(P.y2), 3.2, 0, 6.2832); ctx.fill();
+    ctx.restore();
+    label("p(y₂)", bx, PY - 6, css("--muted"), "left");
+
+    // ---- axes ----
+    ctx.fillStyle = css("--muted");
+    ctx.font = "500 12px " + '"IBM Plex Mono", monospace';
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (var tx = -4; tx <= 4; tx += 2) ctx.fillText(String(tx), mx(tx), PY + PH + 8);
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    for (var ty = -4; ty <= 4; ty += 2) ctx.fillText(String(ty), PX - 8, my(ty));
+
+    ctx.fillStyle = css("--ink-soft");
+    ctx.font = "600 12.5px " + '"IBM Plex Mono", monospace';
+    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    ctx.fillText("y₁", PX + PW / 2, H - 10);
+    ctx.save();
+    ctx.translate(13, PY + PH / 2); ctx.rotate(-Math.PI / 2);
+    ctx.fillText("y₂", 0, 0);
+    ctx.restore();
+
+    // slice value tag
+    ctx.fillStyle = css("--amber");
+    ctx.font = "600 11.5px " + '"IBM Plex Mono", monospace';
+    ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+    ctx.fillText("y₂ = " + P.y2.toFixed(2), PX + 6, my(P.y2) - 5);
+  }
+
+  function label(s, x, y, col, align) {
+    ctx.fillStyle = col;
+    ctx.font = "500 11px " + '"IBM Plex Mono", monospace';
+    ctx.textAlign = align; ctx.textBaseline = "top";
+    ctx.fillText(s, x, y);
+  }
+
+  function cross(x, y, r) {
+    ctx.beginPath();
+    ctx.moveTo(x - r, y); ctx.lineTo(x + r, y);
+    ctx.moveTo(x, y - r); ctx.lineTo(x, y + r);
+    ctx.stroke();
+  }
+
+  function arrow(x0, y0, x1, y1) {
+    var a = mx(x0), b = my(y0), c = mx(x1), d2 = my(y1);
+    ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d2); ctx.stroke();
+    var ang = Math.atan2(d2 - b, c - a);
+    ctx.beginPath();
+    ctx.moveTo(c, d2);
+    ctx.lineTo(c - 8 * Math.cos(ang - 0.38), d2 - 8 * Math.sin(ang - 0.38));
+    ctx.lineTo(c - 8 * Math.cos(ang + 0.38), d2 - 8 * Math.sin(ang + 0.38));
+    ctx.closePath(); ctx.fill();
+  }
+
+  // ---------- readouts ----------
+  var $ = function (id) { return document.getElementById(id); };
+
+  function refresh() {
+    var d = derived();
+    $("mu1v").textContent = P.mu1.toFixed(2);
+    $("mu2v").textContent = P.mu2.toFixed(2);
+    $("s1v").textContent = P.s1.toFixed(2);
+    $("s2v").textContent = P.s2.toFixed(2);
+    $("rhov").textContent = P.rho.toFixed(2);
+    $("y2v").textContent = P.y2.toFixed(2);
+
+    $("S11").textContent = (P.s1 * P.s1).toFixed(2);
+    $("S12").textContent = d.S12.toFixed(2);
+    $("S21").textContent = d.S12.toFixed(2);
+    $("S22").textContent = (P.s2 * P.s2).toFixed(2);
+
+    $("lam1").textContent = d.e.l1.toFixed(2);
+    $("lam2").textContent = d.e.l2.toFixed(2);
+    var deg = Math.atan2(d.e.v1[1], d.e.v1[0]) * 180 / Math.PI;
+    if (deg > 90) deg -= 180;
+    if (deg <= -90) deg += 180;
+    $("tilt").textContent = deg.toFixed(1) + "°";
+    $("det").textContent = d.det.toFixed(3);
+
+    $("cmean").textContent = d.cmean.toFixed(2);
+    $("cvar").textContent = d.cvar.toFixed(2);
+    $("mvar").textContent = (P.s1 * P.s1).toFixed(2);
+    $("shrink").textContent = Math.round(P.rho * P.rho * 100) + "%";
+
+    draw();
+  }
+
+  // ---------- inputs ----------
+  ["mu1", "mu2", "s1", "s2", "rho", "y2"].forEach(function (k) {
+    $(k).addEventListener("input", function (e) { P[k] = parseFloat(e.target.value); refresh(); });
+  });
+
+  function setP(o) {
+    Object.keys(o).forEach(function (k) { P[k] = o[k]; if ($(k)) $(k).value = o[k]; });
+    refresh();
+  }
+
+  var PRESETS = {
+    full: { s1: 1.5, s2: 0.9, rho: 0.8 },
+    diag: { s1: 1.7, s2: 0.75, rho: 0 },
+    sph:  { s1: 1.1, s2: 1.1, rho: 0 },
+    anti: { s1: 1.2, s2: 1.2, rho: -0.85 }
+  };
+
+  var presetBtns = Array.prototype.slice.call(document.querySelectorAll("#presets [data-preset]"));
+  presetBtns.forEach(function (b) {
+    b.addEventListener("click", function () {
+      presetBtns.forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+      setP(PRESETS[b.dataset.preset]);
+    });
+  });
+
+  $("toggleSamples").addEventListener("click", function () {
+    showSamples = !showSamples;
+    this.setAttribute("aria-pressed", String(showSamples));
+    this.textContent = showSamples ? "hide samples" : "show 250 samples";
+    draw();
+  });
+
+  // drag on the plot to move the slice
+  var dragging = false;
+  function pointTo(ev) {
+    var r = cv.getBoundingClientRect();
+    var py = (ev.clientY - r.top) / r.height * H;
+    var v = Math.max(-4, Math.min(4, inv_y(py)));
+    P.y2 = Math.round(v * 20) / 20;
+    $("y2").value = P.y2;
+    refresh();
+  }
+  cv.addEventListener("pointerdown", function (e) { dragging = true; cv.setPointerCapture(e.pointerId); pointTo(e); });
+  cv.addEventListener("pointermove", function (e) { if (dragging) pointTo(e); });
+  cv.addEventListener("pointerup", function () { dragging = false; });
+  cv.addEventListener("pointercancel", function () { dragging = false; });
+
+  // "try this" buttons
+  var animId = null;
+  document.querySelectorAll(".try").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var what = b.dataset.do;
+      if (animId) { cancelAnimationFrame(animId); animId = null; }
+      var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (what === "zero") { setP({ rho: 0 }); return; }
+      if (reduce) { setP(what === "tilt" ? { rho: 0.9 } : { y2: 2 }); return; }
+      var t0 = performance.now();
+      var dur = 3200;
+      function step(now) {
+        var u = Math.min((now - t0) / dur, 1);
+        if (what === "tilt") { $("rho").value = P.rho = -0.9 + 1.8 * (0.5 - 0.5 * Math.cos(u * Math.PI * 2)) ; }
+        else { $("y2").value = P.y2 = 3 * Math.sin(u * Math.PI * 2); }
+        refresh();
+        if (u < 1) animId = requestAnimationFrame(step); else animId = null;
+      }
+      animId = requestAnimationFrame(step);
+    });
+  });
+
+  // re-render on theme change
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+
+  // ---------- quiz ----------
+  var QS = [
+    {
+      q: "You set ρ = 0. What does the conditional p(y₁ | y₂ = 2) look like?",
+      o: ["Identical to the marginal N(μ₁, σ₁²)", "Shifted right by 2 but the same width",
+          "Narrower than the marginal, centered at μ₁", "A spike at y₁ = 2"],
+      a: 0,
+      e: "With ρ = 0 the cross-term vanishes: the mean shift ρ(σ₁/σ₂)(y₂−μ₂) is 0 and the variance σ₁²(1−ρ²) is just σ₁². For <strong>jointly Gaussian</strong> variables, uncorrelated means independent — Y₂ carries no information about Y₁.",
+      act: { rho: 0, y2: 2 }
+    },
+    {
+      q: "σ₁ = σ₂ = 1, ρ = 0.8, μ = 0. You observe y₂ = 1. What is V[Y₁ | y₂]?",
+      o: ["0.80", "0.36", "1.00", "0.64"],
+      a: 1,
+      e: "V[Y₁|y₂] = σ₁²(1 − ρ²) = 1 − 0.64 = <strong>0.36</strong>. Note it doesn't depend on the observed value at all — seeing y₂ = 1 or y₂ = 100 shrinks your uncertainty by exactly the same amount.",
+      act: { s1: 1, s2: 1, rho: 0.8, mu1: 0, mu2: 0, y2: 1 }
+    },
+    {
+      q: "In the eigendecomposition Σ = Σ λ_d u_d u_dᵀ, what do the eigenvalues control?",
+      o: ["The orientation of the ellipse", "How elongated the ellipse is along each axis",
+          "Where the ellipse is centered", "Whether Σ is invertible only"],
+      a: 1,
+      e: "The <strong>eigenvectors</strong> u_d give the ellipse's axis directions; the <strong>eigenvalues</strong> λ_d give the squared half-lengths, so the axis half-length at Δ = 1 is √λ_d. Center comes from μ alone. Watch the violet arrows: they rotate with the eigenvectors and stretch with √λ.",
+      act: { s1: 1.8, s2: 0.6, rho: 0.5 }
+    },
+    {
+      q: "Σ is diagonal but with unequal entries. What shape are the contours?",
+      o: ["A circle", "A tilted ellipse", "An axis-aligned ellipse", "Two parallel lines"],
+      a: 2,
+      e: "Zero off-diagonals means no rotation, so the eigenvectors are the coordinate axes — an <strong>axis-aligned ellipse</strong> (Fig. 3.6b). You only get a circle when Σ = σ²I (spherical/isotropic), and a tilt requires a nonzero covariance term.",
+      act: { s1: 1.7, s2: 0.75, rho: 0 }
+    },
+    {
+      q: "Two different points lie on the same contour ellipse. What do they share?",
+      o: ["The same value of y₁", "The same Mahalanobis distance from μ, and the same density",
+          "The same conditional variance only", "Nothing — contours are just decoration"],
+      a: 1,
+      e: "log p(y) = −½Δ² + const, so constant Δ² <em>is</em> constant log-density. That's the whole point of §3.2.2: the level sets of the Gaussian are the level sets of the <strong>Mahalanobis distance</strong> (eq. 3.19–3.20).",
+      act: null
+    },
+    {
+      q: "σ₁ = σ₂ = 1, μ = 0, but now ρ = −0.6. You observe y₂ = 2. What is E[Y₁ | y₂]?",
+      o: ["+1.2", "−1.2", "−0.6", "+2.0"],
+      a: 1,
+      e: "E[Y₁|y₂] = μ₁ + ρ(σ₁/σ₂)(y₂ − μ₂) = 0 + (−0.6)(1)(2) = <strong>−1.2</strong>. A negative correlation means a y₂ above its mean pulls your expectation for Y₁ <em>below</em> its mean.",
+      act: { s1: 1, s2: 1, rho: -0.6, mu1: 0, mu2: 0, y2: 2 }
+    },
+    {
+      q: "How do you get the marginal p(y₁) from a joint Gaussian with parameters (μ, Σ)?",
+      o: ["Invert Σ and take the top-left block of Λ", "Read off μ₁ and Σ₁₁ directly",
+          "Compute Σ₁₁ − Σ₁₂Σ₂₂⁻¹Σ₂₁", "Integrate numerically — there's no closed form"],
+      a: 1,
+      e: "Marginalizing is the easy direction: <strong>just extract the corresponding rows and columns</strong>, p(y₁) = N(y₁ | μ₁, Σ₁₁) (eq. 3.27). The Schur complement Σ₁₁ − Σ₁₂Σ₂₂⁻¹Σ₂₁ is the <em>conditional</em> covariance — always the smaller of the two.",
+      act: null
+    }
+  ];
+
+  var qi = 0, right = 0, answered = 0;
+  var syncOn = true;       // auto-set the plot when a question is answered
+  var savedP = null;       // the reader's own settings, stashed while a scenario is applied
+
+  $("sync").addEventListener("click", function () {
+    syncOn = !syncOn;
+    this.setAttribute("aria-pressed", String(syncOn));
+  });
+
+  // human-readable summary of a question's setup
+  var NAMES = { mu1: "μ₁", mu2: "μ₂", s1: "σ₁", s2: "σ₂", rho: "ρ", y2: "y₂" };
+  function describe(act) {
+    return ["s1", "s2", "rho", "mu1", "mu2", "y2"]
+      .filter(function (k) { return act[k] !== undefined; })
+      .map(function (k) { return NAMES[k] + " = " + act[k]; })
+      .join("   ");
+  }
+
+  function applyScenario() {
+    var act = QS[qi].act;
+    if (!act) return;
+    if (savedP) { setP(savedP); savedP = null; }
+    else { savedP = JSON.parse(JSON.stringify(P)); setP(act); }
+    paintScenario();
+  }
+
+  function paintScenario() {
+    var Q = QS[qi];
+    if (!Q.act) { $("scenario").hidden = true; return; }
+    $("scenario").hidden = false;
+    $("applyBtn").textContent = savedP ? "↩ back to my settings" : "set the plot to this →";
+    $("setup").textContent = savedP ? "showing the question's numbers" : describe(Q.act);
+  }
+
+  $("applyBtn").addEventListener("click", applyScenario);
+
+  function renderQ() {
+    var Q = QS[qi];
+    savedP = null;
+    $("qmeta").textContent = "Question " + (qi + 1) + " of " + QS.length;
+    $("qtext").textContent = Q.q;
+    paintScenario();
+    $("explain").innerHTML = "";
+    $("next").hidden = true;
+    $("restart").hidden = true;
+    $("hintline").textContent = "pick an answer";
+    var box = $("opts");
+    box.innerHTML = "";
+    Q.o.forEach(function (text, i) {
+      var b = document.createElement("button");
+      b.className = "opt";
+      b.innerHTML = '<span class="mark">' + "ABCD"[i] + '</span><span>' + text + '</span>';
+      b.addEventListener("click", function () { answer(i); });
+      box.appendChild(b);
+    });
+  }
+
+  function answer(i) {
+    var Q = QS[qi];
+    var btns = Array.prototype.slice.call($("opts").children);
+    btns.forEach(function (b, k) {
+      b.disabled = true;
+      if (k === Q.a) b.classList.add("correct");
+      else if (k === i) b.classList.add("wrong");
+    });
+    answered++;
+    if (i === Q.a) right++;
+    $("score").textContent = right + " / " + answered;
+
+    var ex = document.createElement("div");
+    ex.className = "explain";
+    ex.innerHTML = (i === Q.a ? "<strong>Right.</strong> " : "<strong>Not quite.</strong> ") + Q.e;
+    $("explain").appendChild(ex);
+
+    if (Q.act && syncOn && !savedP) {
+      savedP = JSON.parse(JSON.stringify(P));
+      setP(Q.act);
+      paintScenario();
+      $("hintline").textContent = "plot set to this question";
+    } else if (Q.act && !savedP) {
+      $("hintline").textContent = "auto-set is off";
+    } else {
+      $("hintline").textContent = "";
+    }
+
+    if (qi < QS.length - 1) { $("next").hidden = false; }
+    else {
+      $("restart").hidden = false;
+      $("hintline").textContent = "final score " + right + " / " + QS.length;
+    }
+  }
+
+  $("next").addEventListener("click", function () { qi++; renderQ(); });
+  $("restart").addEventListener("click", function () { qi = 0; right = 0; answered = 0; $("score").textContent = "0 / 0"; renderQ(); });
+
+  renderQ();
+  refresh();
+})();
+</script>
