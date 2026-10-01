@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>ROC Curve Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a single-column lab notebook. Each section is one experiment: a live figure on top, the numbers it produces beside or below it. */
+:root{
+  --bg:#f3f4f0; --surface:#ffffff; --ink:#1c2026; --muted:#5b6470; --line:#d8dbd3;
+  --neg:#3563ae; --pos:#cc6a17; --good:#2c8653; --bad:#bf3b34; --hl:#fff4c2;
+  --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body:"Public Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121519; --surface:#1a1e24; --ink:#e7e9e4; --muted:#9aa3ad; --line:#2d333b;
+    --neg:#6f9ce4; --pos:#f0a256; --good:#5cc489; --bad:#ef7d75; --hl:#3a3418; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121519; --surface:#1a1e24; --ink:#e7e9e4; --muted:#9aa3ad; --line:#2d333b;
+  --neg:#6f9ce4; --pos:#f0a256; --good:#5cc489; --bad:#ef7d75; --hl:#3a3418; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:28px 80px;display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.1}
+h1{font-size:clamp(2.2rem,5vw,3.4rem);font-weight:700;letter-spacing:-.02em}
+h2{font-size:clamp(1.5rem,3vw,2rem);font-weight:700;letter-spacing:-.01em}
+h3{font-size:1.1rem;font-weight:500}
+p{margin:0;max-width:68ch}
+.eyebrow{font-family:var(--mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+b.pos,b.neg{font-weight:600}
+header{display:flex;flex-direction:column;gap:14px}
+.lede{font-size:1.1rem;max-width:62ch}
+nav{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+nav a{font-family:var(--mono);font-size:.8rem;color:var(--ink);text-decoration:none;border:1px solid var(--line);background:var(--surface);padding:6px 12px;border-radius:999px}
+nav a:hover{border-color:var(--ink)}
+section{display:flex;flex-direction:column;gap:18px;scroll-margin-top:16px}
+.sec-head{display:flex;flex-direction:column;gap:8px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+.grid2{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:18px;align-items:start}
+.grid2b{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:880px){.grid2,.grid2b{grid-template-columns:minmax(0,1fr)}}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.stack{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+
+/* svg classes */
+.ax{stroke:var(--muted);stroke-width:1}
+.gridl{stroke:var(--line);stroke-width:1}
+.tick{fill:var(--muted);font-family:var(--mono);font-size:11px}
+.lbl{fill:var(--ink);font-family:var(--body);font-size:12px}
+.lbl-neg{fill:var(--neg);font-family:var(--body);font-size:12px;font-weight:600}
+.lbl-pos{fill:var(--pos);font-family:var(--body);font-size:12px;font-weight:600}
+.mid{text-anchor:middle} .end{text-anchor:end}
+.f-tn{fill:var(--neg);fill-opacity:.13} .f-fp{fill:var(--neg);fill-opacity:.55}
+.f-fn{fill:var(--pos);fill-opacity:.15} .f-tp{fill:var(--pos);fill-opacity:.6}
+.l-neg{fill:none;stroke:var(--neg);stroke-width:2} .l-pos{fill:none;stroke:var(--pos);stroke-width:2}
+.thr{stroke:var(--ink);stroke-width:2}
+.thr-hit{stroke:transparent;stroke-width:28;cursor:ew-resize}
+.thr-tag{fill:var(--ink)} .thr-tag-t{fill:var(--bg);font-family:var(--mono);font-size:12px;font-weight:600}
+.roc{fill:none;stroke:var(--ink);stroke-width:2.5}
+.auc{fill:var(--ink);fill-opacity:.07}
+.chance{stroke:var(--muted);stroke-dasharray:4 4;stroke-width:1}
+.eerl{stroke:var(--muted);stroke-dasharray:1 4;stroke-width:1.5;stroke-linecap:round}
+.dot-cur{fill:var(--ink);stroke:var(--surface);stroke-width:3}
+.guide-neg{stroke:var(--neg);stroke-width:1.5;stroke-dasharray:3 3}
+.guide-pos{stroke:var(--pos);stroke-width:1.5;stroke-dasharray:3 3}
+.eerdot{fill:var(--surface);stroke:var(--ink);stroke-width:2}
+.bayes{fill:var(--good)} .bayes-l{stroke:var(--good);stroke-width:1.5;stroke-dasharray:2 3}
+.bayes-t{fill:var(--good);font-family:var(--mono);font-size:11px;font-weight:600}
+.sdot-pos{fill:var(--pos);stroke:var(--pos);stroke-width:2} .sdot-neg{fill:var(--neg);stroke:var(--neg);stroke-width:2}
+.sdot-pos.off{fill:var(--surface)} .sdot-neg.off{fill:var(--surface)}
+.stair{fill:none;stroke:var(--ink);stroke-width:2.5;stroke-linejoin:round}
+.stair-pt{fill:var(--ink)}
+.stair-ghost{fill:none;stroke:var(--muted);stroke-width:1;stroke-dasharray:2 4}
+.nudge{font-family:var(--mono);font-size:11px;font-weight:600}
+
+/* controls */
+label.ctl{display:flex;flex-direction:column;gap:4px;font-size:.88rem;min-width:0;flex:1 1 200px}
+label.ctl span.top{display:flex;justify-content:space-between;gap:8px}
+input[type=range]{width:100%;accent-color:var(--ink)}
+button{font:inherit;font-size:.88rem;cursor:pointer;border-radius:8px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);padding:8px 14px;line-height:1.2}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button.ghost:hover{border-color:var(--ink)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--pos);outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.82rem;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px}
+.sw-tp{background:color-mix(in srgb,var(--pos) 60%,transparent)} .sw-fn{background:color-mix(in srgb,var(--pos) 15%,transparent);outline:1px solid var(--pos);outline-offset:-1px}
+.sw-fp{background:color-mix(in srgb,var(--neg) 55%,transparent)} .sw-tn{background:color-mix(in srgb,var(--neg) 13%,transparent);outline:1px solid var(--neg);outline-offset:-1px}
+
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat{border-top:2px solid var(--ink);padding-top:6px;min-width:0}
+.stat .k{font-size:.75rem;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em}
+.stat .v{font-family:var(--mono);font-size:1.25rem;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* confusion matrix */
+.cm{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto;gap:4px;font-variant-numeric:tabular-nums}
+.cm .h{font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:flex;align-items:flex-end;justify-content:center;padding:4px;text-align:center}
+.cm .rh{justify-content:flex-start;align-items:center;text-align:left}
+.cm .c{border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:2px;min-width:0;transition:box-shadow .15s, opacity .15s}
+.cm .c .n{font-family:var(--mono);font-size:1.35rem;font-weight:600}
+.cm .c .nm{font-size:.78rem;font-weight:600}
+.cm .c .r{font-family:var(--mono);font-size:.8rem}
+.c-tp{background:color-mix(in srgb,var(--pos) 42%,var(--surface))}
+.c-fn{background:color-mix(in srgb,var(--pos) 12%,var(--surface));box-shadow:inset 0 0 0 1px var(--pos)}
+.c-fp{background:color-mix(in srgb,var(--neg) 40%,var(--surface))}
+.c-tn{background:color-mix(in srgb,var(--neg) 11%,var(--surface));box-shadow:inset 0 0 0 1px var(--neg)}
+.cm .sum{font-family:var(--mono);font-size:.85rem;display:flex;align-items:center;padding:0 6px;color:var(--muted)}
+.rowbar{display:flex;height:22px;border-radius:5px;overflow:hidden;font-family:var(--mono);font-size:.72rem}
+.rowbar div{display:flex;align-items:center;padding:0 6px;white-space:nowrap;overflow:hidden;min-width:0;transition:flex-basis .12s}
+.rb-tn{background:color-mix(in srgb,var(--neg) 13%,var(--surface));box-shadow:inset 0 0 0 1px var(--neg)}
+.rb-fp{background:color-mix(in srgb,var(--neg) 55%,var(--surface));justify-content:flex-end}
+.rb-fn{background:color-mix(in srgb,var(--pos) 15%,var(--surface));box-shadow:inset 0 0 0 1px var(--pos)}
+.rb-tp{background:color-mix(in srgb,var(--pos) 58%,var(--surface));justify-content:flex-end}
+.story{font-size:.98rem;background:var(--bg);border-radius:8px;padding:12px 14px}
+.note{font-size:.88rem;color:var(--muted);max-width:72ch}
+
+/* hand table */
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.86rem;font-variant-numeric:tabular-nums}
+th{font-family:var(--mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;font-weight:400;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:5px 8px;border-bottom:1px solid var(--line)}
+tr.on td{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+tr.new td{background:var(--hl)}
+.chip{display:inline-block;font-family:var(--mono);font-size:.72rem;font-weight:600;padding:1px 7px;border-radius:999px}
+.ch-pos{background:color-mix(in srgb,var(--pos) 22%,transparent);color:var(--ink)}
+.ch-neg{background:color-mix(in srgb,var(--neg) 22%,transparent);color:var(--ink)}
+.ch-TP{background:color-mix(in srgb,var(--pos) 50%,var(--surface))} .ch-FN{box-shadow:inset 0 0 0 1px var(--pos)}
+.ch-FP{background:color-mix(in srgb,var(--neg) 48%,var(--surface))} .ch-TN{box-shadow:inset 0 0 0 1px var(--neg)}
+.callout{border-left:3px solid var(--ink);padding:6px 0 6px 12px;font-size:.95rem}
+
+/* decoder */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{background:transparent;color:var(--ink);border:1px solid var(--line);font-family:var(--mono);font-weight:600}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.cm.dec .c{opacity:.35}
+.cm.dec .c.num{opacity:1;box-shadow:0 0 0 3px var(--ink)}
+.cm.dec .c.den{opacity:1}
+.cm.dec .h.den{color:var(--ink);font-weight:600}
+.formula{font-family:var(--mono);font-size:1.05rem;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.frac{display:inline-flex;flex-direction:column;align-items:center}
+.frac span:first-child{border-bottom:2px solid var(--ink);padding:0 6px}
+.frac span:last-child{padding:0 6px}
+.alias{display:flex;flex-wrap:wrap;gap:6px}
+.alias span{font-size:.8rem;border:1px solid var(--line);border-radius:999px;padding:2px 10px}
+.rule{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:700px){.rule{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.rule div{background:var(--bg);border-radius:8px;padding:10px;font-size:.85rem;min-width:0}
+.rule b{font-family:var(--mono);display:block;font-size:1rem}
+
+/* quiz */
+.qcard{display:flex;flex-direction:column;gap:16px}
+.qprog{display:flex;gap:5px;flex-wrap:wrap}
+.qprog span{width:22px;height:6px;border-radius:3px;background:var(--line)}
+.qprog span.cur{background:var(--ink)}
+.qprog span.ok{background:var(--good)} .qprog span.no{background:var(--bad)}
+.qtext{font-size:1.08rem;max-width:70ch}
+.qchoices{display:flex;flex-direction:column;gap:8px}
+.qchoices button{text-align:left;background:var(--surface);color:var(--ink);border:1px solid var(--line);padding:11px 14px;font-size:.95rem}
+.qchoices button:hover:not(:disabled){border-color:var(--ink)}
+.qchoices button:disabled{opacity:1;cursor:default}
+.qchoices button.right{border-color:var(--good);background:color-mix(in srgb,var(--good) 14%,var(--surface))}
+.qchoices button.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,var(--surface))}
+.qfb{border-radius:8px;padding:12px 14px;background:var(--bg);font-size:.95rem}
+.qfb strong.ok{color:var(--good)} .qfb strong.no{color:var(--bad)}
+.qvis{max-width:360px}
+.qlist{display:flex;flex-wrap:wrap;gap:6px}
+.qlist span{font-family:var(--mono);font-size:.82rem;padding:3px 8px;border-radius:6px}
+.mini-cm{display:inline-grid;grid-template-columns:auto 90px 90px;gap:3px;font-family:var(--mono);font-size:.85rem}
+.mini-cm div{padding:6px 8px;border-radius:5px}
+.mini-cm .h{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center}
+.score-big{font-family:var(--display);font-size:3rem;font-weight:700}
+.review{display:flex;flex-direction:column;gap:6px;font-size:.9rem}
+.review div{display:flex;gap:8px}
+.review .m{font-family:var(--mono);font-weight:600;width:1.2em}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">CS 473 · Murphy, PML ch. 5.1.3</div>
+  <h1>ROC Curve Lab</h1>
+  <p class="lede">A classifier gives every example a score. To get a yes/no answer you pick a threshold τ. Every choice of τ yields a confusion matrix, and from it a pair of rates (FPR, TPR). Sweep τ across all values and those pairs trace out the ROC curve.</p>
+  <nav aria-label="Sections">
+    <a href="#lab">1 · Drag the threshold</a>
+    <a href="#byhand">2 · Build one by hand</a>
+    <a href="#rates">3 · TPR, FPR, TNR, FNR</a>
+    <a href="#quiz">4 · Quiz</a>
+  </nav>
+</header>
+
+<!-- ============ 1. LAB ============ -->
+<section id="lab">
+  <div class="sec-head">
+    <div class="eyebrow">Experiment 1</div>
+    <h2>Drag the threshold and watch the point move</h2>
+    <p class="muted">The two humps are the classifier's scores for examples that are <b class="neg">truly negative (y = 0)</b> and <b class="pos">truly positive (y = 1)</b>. Everything right of τ gets predicted positive. Drag the black line on the left chart, or drag along the curve on the right.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="panel stack">
+      <svg id="dist" viewBox="0 0 640 260" role="img" aria-label="Score distributions for negative and positive examples with a draggable threshold"></svg>
+      <div class="legend">
+        <span><i class="sw-tp"></i>TP: positive, called positive</span>
+        <span><i class="sw-fn"></i>FN: positive, called negative</span>
+        <span><i class="sw-fp"></i>FP: negative, called positive</span>
+        <span><i class="sw-tn"></i>TN: negative, called negative</span>
+      </div>
+      <div class="row">
+        <label class="ctl" for="tSlider"><span class="top"><span>Threshold τ (score)</span><span class="mono" id="tVal"></span></span>
+          <input type="range" id="tSlider" min="-5" max="5" step="0.01"></label>
+        <label class="ctl" for="dSlider"><span class="top"><span>Class separation</span><span class="mono" id="dVal"></span></span>
+          <input type="range" id="dSlider" min="0" max="4.5" step="0.05"></label>
+        <label class="ctl" for="pSlider"><span class="top"><span>Positives in test set</span><span class="mono" id="pVal"></span></span>
+          <input type="range" id="pSlider" min="0.05" max="0.95" step="0.01"></label>
+      </div>
+      <p class="note">Try this: set separation to 0 (the classifier is guessing) and the curve falls onto the diagonal. Then change the share of positives. The humps change size, the counts change, but the ROC curve does not move, because TPR and FPR are each computed within one true class.</p>
+    </div>
+
+    <div class="panel stack">
+      <svg id="roc" viewBox="0 0 340 340" role="img" aria-label="ROC curve with the current operating point"></svg>
+      <div class="stats">
+        <div class="stat"><div class="k">AUC</div><div class="v" id="aucV"></div></div>
+        <div class="stat"><div class="k">EER</div><div class="v" id="eerV"></div></div>
+        <div class="stat"><div class="k">Point (FPR, TPR)</div><div class="v" id="ptV" style="font-size:1rem"></div></div>
+      </div>
+      <p class="note"><b>AUC</b> is the shaded area under the curve (1 is perfect, 0.5 is guessing). <b>EER</b> is the error rate where FPR = FNR, found where the curve crosses the dotted line from (0, 1) to (1, 0). Lower is better.</p>
+    </div>
+  </div>
+
+  <div class="grid2b">
+    <div class="panel stack">
+      <h3>Confusion matrix at this τ <span class="muted mono" style="font-size:.85rem" id="cmTotal"></span></h3>
+      <div class="cm" id="labCm"></div>
+      <div class="stack" style="gap:8px">
+        <div class="eyebrow">Each row normalized to 1</div>
+        <div class="row" style="gap:8px;flex-wrap:nowrap"><span class="mono neg" style="font-size:.75rem;width:58px;flex:none">Truth 0</span><div class="rowbar" style="flex:1" id="rbNeg"></div></div>
+        <div class="row" style="gap:8px;flex-wrap:nowrap"><span class="mono pos" style="font-size:.75rem;width:58px;flex:none">Truth 1</span><div class="rowbar" style="flex:1" id="rbPos"></div></div>
+      </div>
+    </div>
+    <div class="panel stack">
+      <h3>What this τ means in words</h3>
+      <div class="story" id="story"></div>
+      <h3>Where should τ go? Let the costs decide</h3>
+      <p class="note">From §5.1.2.2: if a false negative costs <i>c</i> times as much as a false positive, predict positive when p(y = 1 | x) ≥ 1/(1 + c). The green marker shows that threshold on both charts.</p>
+      <label class="ctl" for="cSlider"><span class="top"><span>Cost ratio c = cost(FN) / cost(FP)</span><span class="mono" id="cVal"></span></span>
+        <input type="range" id="cSlider" min="-2.3" max="2.3" step="0.01"></label>
+      <div class="row">
+        <button type="button" id="snapBayes">Move τ to the cost-optimal point</button>
+        <button type="button" class="ghost" id="snapEer">Move τ to the EER point</button>
+      </div>
+      <p class="note mono" id="probEq" style="font-size:.8rem"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. BY HAND ============ -->
+<section id="byhand">
+  <div class="sec-head">
+    <div class="eyebrow">Experiment 2</div>
+    <h2>Calculate an ROC curve by hand</h2>
+    <p class="muted">With a real test set you have a finite list of scored examples. The recipe: sort by score from high to low, start with τ above every score, then lower τ past one example at a time. Each positive you pass moves the curve <b>up</b> by 1/P. Each negative moves it <b>right</b> by 1/N.</p>
+  </div>
+  <div class="panel stack">
+    <svg id="strip" viewBox="0 0 640 100" role="img" aria-label="Scored examples on a 0 to 1 line with the current threshold"></svg>
+    <div class="row">
+      <button type="button" class="ghost" id="hBack">◀ Back</button>
+      <button type="button" id="hNext">Lower τ past the next example ▶</button>
+      <button type="button" class="ghost" id="hPlay">Play all</button>
+      <button type="button" class="ghost" id="hReset">Reset</button>
+      <button type="button" class="ghost" id="hRand">New random test set</button>
+    </div>
+    <div class="callout" id="hExplain"></div>
+  </div>
+  <div class="grid2b">
+    <div class="panel stack">
+      <h3 id="hTau"></h3>
+      <div class="tbl-wrap"><table id="hTable"></table></div>
+    </div>
+    <div class="panel stack">
+      <svg id="hRoc" viewBox="0 0 340 340" role="img" aria-label="ROC curve built step by step"></svg>
+      <div class="stack" id="hCounts" style="gap:6px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. RATES ============ -->
+<section id="rates">
+  <div class="sec-head">
+    <div class="eyebrow">Experiment 3</div>
+    <h2>TPR, FPR, TNR, FNR: four rates, two rows</h2>
+    <p class="muted">All four rates divide by a <b>row</b> of the confusion matrix, meaning they condition on the true label: p(ŷ | y). Pick a rate to see which cell is on top of the fraction and which row is on the bottom. Precision is included as a contrast because it divides by a <b>column</b> instead.</p>
+  </div>
+  <div class="panel stack">
+    <div class="chips" id="decChips" role="group" aria-label="Choose a rate"></div>
+    <div class="grid2b">
+      <div class="stack">
+        <div class="cm dec" id="decCm"></div>
+        <p class="note">Example: a screening test applied to 100 people, 20 of whom are truly positive.</p>
+      </div>
+      <div class="stack" id="decInfo"></div>
+    </div>
+  </div>
+  <div class="panel stack">
+    <h3>How to read the names</h3>
+    <p class="note" style="color:var(--ink)">The <b>last</b> word before "rate" is what the classifier <b>predicted</b>. The <b>first</b> word says whether that prediction was <b>right</b>. The denominator is everyone who truly belongs to the same class as that cell.</p>
+    <div class="rule">
+      <div><b class="pos">TPR</b>predicted Positive, correctly. So truly positive. ÷ all truly positive (P).</div>
+      <div><b class="pos">FNR</b>predicted Negative, wrongly. So truly positive. ÷ all truly positive (P).</div>
+      <div><b class="neg">FPR</b>predicted Positive, wrongly. So truly negative. ÷ all truly negative (N).</div>
+      <div><b class="neg">TNR</b>predicted Negative, correctly. So truly negative. ÷ all truly negative (N).</div>
+    </div>
+    <p class="note">That gives two pairs that always add to 1: <b>TPR + FNR = 1</b> (the positive row) and <b>FPR + TNR = 1</b> (the negative row). The ROC curve plots one rate from each row: TPR on the y-axis and FPR on the x-axis. Together they describe the whole matrix.</p>
+  </div>
+</section>
+
+<!-- ============ 4. QUIZ ============ -->
+<section id="quiz">
+  <div class="sec-head">
+    <div class="eyebrow">Check yourself</div>
+    <h2>Quiz</h2>
+    <p class="muted">13 questions. The numbers are random, so "Try a new set" gives you fresh practice.</p>
+  </div>
+  <div class="panel qcard" id="quizBox"></div>
+</section>
+</div>
+
+<script>
+(() => {
+const NS = 'http://www.w3.org/2000/svg';
+const $ = s => document.querySelector(s);
+function el(tag, attrs, parent, txt){ const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); if(txt!=null) e.textContent=txt; if(parent) parent.appendChild(e); return e; }
+const f2 = v => v.toFixed(2), f3 = v => v.toFixed(3);
+const pct = v => Math.round(v*100)+'%';
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+function erf(x){ const s=Math.sign(x); x=Math.abs(x); const t=1/(1+0.3275911*x);
+  const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x); return s*y; }
+const Phi = z => 0.5*(1+erf(z/Math.SQRT2));
+const pdf = z => Math.exp(-z*z/2)/Math.sqrt(2*Math.PI);
+const sigmoid = z => 1/(1+Math.exp(-z));
+function svgPoint(svg, evt){ const p=svg.createSVGPoint(); p.x=evt.clientX; p.y=evt.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
+
+/* shared ROC frame: viewBox 340x340 */
+function rocFrame(s, opts={}){
+  const L=48,R=12,T=12,B=44,W=340,H=340;
+  const X=f=>L+f*(W-L-R), Y=v=>H-B-v*(H-T-B);
+  for(let i=0;i<=5;i++){ const v=i/5;
+    el('line',{x1:X(v),x2:X(v),y1:Y(0),y2:Y(1),class:'gridl'},s);
+    el('line',{x1:X(0),x2:X(1),y1:Y(v),y2:Y(v),class:'gridl'},s);
+    el('text',{x:X(v),y:Y(0)+16,class:'tick mid'},s,v.toFixed(1));
+    el('text',{x:X(0)-7,y:Y(v)+4,class:'tick end'},s,v.toFixed(1)); }
+  el('line',{x1:X(0),y1:Y(0),x2:X(1),y2:Y(0),class:'ax'},s);
+  el('line',{x1:X(0),y1:Y(0),x2:X(0),y2:Y(1),class:'ax'},s);
+  el('line',{x1:X(0),y1:Y(0),x2:X(1),y2:Y(1),class:'chance'},s);
+  if(!opts.noChanceLabel){ const t=el('text',{x:X(.62),y:Y(.62)+14,class:'tick',transform:`rotate(-45 ${X(.62)} ${Y(.62)+14})`},s,'random guessing'); }
+  el('text',{x:(X(0)+X(1))/2,y:H-6,class:'lbl-neg mid'},s,'False positive rate (FPR)');
+  el('text',{x:14,y:(Y(0)+Y(1))/2,class:'lbl-pos mid',transform:`rotate(-90 14 ${(Y(0)+Y(1))/2})`},s,'True positive rate (TPR)');
+  return {X,Y};
+}
+
+/* ================= 1. LAB ================= */
+const lab = {t:0.6, d:1.8, prev:0.3, lc:Math.log(2), total:1000};
+const LO=-5, HI=5, DW=640, DH=260, ml=14, mr=14, mt=46, mb=34, base=DH-mb;
+const sx = x => ml+(x-LO)/(HI-LO)*(DW-ml-mr);
+const invx = px => LO+(px-ml)/(DW-ml-mr)*(HI-LO);
+const dEff = () => Math.max(lab.d, 1e-6);
+const ratesAt = t => ({tpr:1-Phi(t-lab.d/2), fpr:1-Phi(t+lab.d/2)});
+const bayesT = () => { const c=Math.exp(lab.lc); return clamp((-Math.log(c)-Math.log(lab.prev/(1-lab.prev)))/dEff(), LO, HI); };
+
+function counts(){
+  const P=Math.round(lab.total*lab.prev), N=lab.total-P, r=ratesAt(lab.t);
+  const TP=Math.round(r.tpr*P), FP=Math.round(r.fpr*N);
+  return {P,N,TP,FP,FN:P-TP,TN:N-FP};
+}
+
+function drawDist(){
+  const s=$('#dist'); s.innerHTML='';
+  const {d,prev,t}=lab, mN=-d/2, mP=d/2, wN=1-prev, wP=prev;
+  const ymax=0.3989*Math.max(wN,wP)*1.05;
+  const sy=y=>base-y/ymax*(base-mt);
+  el('line',{x1:ml,x2:DW-mr,y1:base,y2:base,class:'ax'},s);
+  for(let i=LO;i<=HI;i++){ el('line',{x1:sx(i),x2:sx(i),y1:base,y2:base+4,class:'ax'},s); el('text',{x:sx(i),y:base+17,class:'tick mid'},s,i); }
+  el('text',{x:DW-mr,y:base+31,class:'tick end'},s,'classifier score →');
+  const area=(mu,w,a,b,cls)=>{ if(b<=a) return; const n=Math.max(2,Math.ceil((b-a)/0.04)); let p=`M${sx(a).toFixed(1)},${base}`;
+    for(let i=0;i<=n;i++){ const x=a+(b-a)*i/n; p+=`L${sx(x).toFixed(1)},${sy(w*pdf(x-mu)).toFixed(1)}`; } p+=`L${sx(b).toFixed(1)},${base}Z`; el('path',{d:p,class:cls},s); };
+  const line=(mu,w,cls)=>{ let p=''; for(let i=0;i<=250;i++){ const x=LO+(HI-LO)*i/250; p+=(i?'L':'M')+sx(x).toFixed(1)+','+sy(w*pdf(x-mu)).toFixed(1);} el('path',{d:p,class:cls},s); };
+  area(mN,wN,LO,t,'f-tn'); area(mN,wN,t,HI,'f-fp'); area(mP,wP,LO,t,'f-fn'); area(mP,wP,t,HI,'f-tp');
+  line(mN,wN,'l-neg'); line(mP,wP,'l-pos');
+  el('text',{x:sx(mN)-8,y:sy(wN*0.3989)-8,class:'lbl-neg end'},s,'truly negative');
+  el('text',{x:sx(mP)+8,y:sy(wP*0.3989)-8,class:'lbl-pos'},s,'truly positive');
+  // bayes marker
+  const bt=bayesT();
+  el('line',{x1:sx(bt),x2:sx(bt),y1:mt-6,y2:base,class:'bayes-l'},s);
+  el('path',{d:`M${sx(bt)},${base-1} l-6,9 h12 z`,class:'bayes'},s);
+  // threshold
+  const tx=sx(t);
+  el('text',{x:tx-10,y:mt-14,class:'tick end'},s,'← predict 0');
+  el('text',{x:tx+10,y:mt-14,class:'tick'},s,'predict 1 →');
+  el('line',{x1:tx,x2:tx,y1:mt-4,y2:base,class:'thr'},s);
+  el('rect',{x:tx-34,y:4,width:68,height:20,rx:4,class:'thr-tag'},s);
+  el('text',{x:tx,y:18,class:'thr-tag-t mid'},s,'τ = '+f2(t));
+  el('line',{x1:tx,x2:tx,y1:0,y2:base,class:'thr-hit'},s);
+}
+
+function drawRoc(){
+  const s=$('#roc'); s.innerHTML='';
+  const {X,Y}=rocFrame(s);
+  const pts=[]; for(let i=0;i<=300;i++){ const t=HI-(HI-LO)*i/300; const r=ratesAt(t); pts.push([r.fpr,r.tpr,t]); }
+  pts.unshift([0,0,HI+1]); pts.push([1,1,LO-1]);
+  let p=''; pts.forEach((q,i)=>p+=(i?'L':'M')+X(q[0]).toFixed(1)+','+Y(q[1]).toFixed(1));
+  el('path',{d:p+`L${X(1)},${Y(0)}L${X(0)},${Y(0)}Z`,class:'auc'},s);
+  el('line',{x1:X(0),y1:Y(1),x2:X(1),y2:Y(0),class:'eerl'},s);
+  el('path',{d:p,class:'roc'},s);
+  // EER
+  const ef=1-Phi(lab.d/2);
+  el('circle',{cx:X(ef),cy:Y(1-ef),r:5,class:'eerdot'},s);
+  el('text',{x:X(ef)+8,y:Y(1-ef)-6,class:'tick'},s,'EER');
+  // bayes
+  const br=ratesAt(bayesT());
+  el('path',{d:`M${X(br.fpr)},${Y(br.tpr)-7} l7,7 l-7,7 l-7,-7z`,class:'bayes'},s);
+  // current
+  const r=ratesAt(lab.t), cx=X(r.fpr), cy=Y(r.tpr);
+  el('line',{x1:cx,x2:cx,y1:cy,y2:Y(0),class:'guide-neg'},s);
+  el('line',{x1:X(0),x2:cx,y1:cy,y2:cy,class:'guide-pos'},s);
+  el('text',{x:cx,y:Y(0)-6,class:'nudge mid',style:'fill:var(--neg)'},s,f2(r.fpr));
+  el('text',{x:X(0)+5,y:cy-5,class:'nudge',style:'fill:var(--pos)'},s,f2(r.tpr));
+  el('circle',{cx,cy,r:7,class:'dot-cur'},s);
+  s._pts=pts; s._X=X; s._Y=Y;
+}
+
+function drawLabCm(){
+  const c=counts(), tpr=c.TP/c.P, fnr=c.FN/c.P, fpr=c.FP/c.N, tnr=c.TN/c.N;
+  $('#cmTotal').textContent=`(${lab.total} test examples)`;
+  $('#labCm').innerHTML=`
+   <div></div><div class="h">Predicted 0</div><div class="h">Predicted 1</div><div class="h">Row sum</div>
+   <div class="h rh neg">Truth 0</div>
+   <div class="c c-tn"><span class="nm">TN</span><span class="n">${c.TN}</span><span class="r">TNR ${f2(tnr)}</span></div>
+   <div class="c c-fp"><span class="nm">FP</span><span class="n">${c.FP}</span><span class="r">FPR ${f2(fpr)}</span></div>
+   <div class="sum">N = ${c.N}</div>
+   <div class="h rh pos">Truth 1</div>
+   <div class="c c-fn"><span class="nm">FN</span><span class="n">${c.FN}</span><span class="r">FNR ${f2(fnr)}</span></div>
+   <div class="c c-tp"><span class="nm">TP</span><span class="n">${c.TP}</span><span class="r">TPR ${f2(tpr)}</span></div>
+   <div class="sum">P = ${c.P}</div>`;
+  const bar=(a,b,ca,cb,la,lb)=>`<div class="${ca}" style="flex-basis:${a*100}%">${a>.14?la+' '+f2(a):''}</div><div class="${cb}" style="flex-basis:${b*100}%">${b>.14?lb+' '+f2(b):''}</div>`;
+  $('#rbNeg').innerHTML=bar(tnr,fpr,'rb-tn','rb-fp','TNR','FPR');
+  $('#rbPos').innerHTML=bar(fnr,tpr,'rb-fn','rb-tp','FNR','TPR');
+  $('#story').innerHTML=`Of the <b class="pos">${c.P} truly positive</b> examples, τ = ${f2(lab.t)} catches <b>${c.TP}</b> (TPR = ${c.TP}/${c.P} = ${f2(tpr)}) and misses <b>${c.FN}</b> (FNR = ${f2(fnr)}).<br>
+    Of the <b class="neg">${c.N} truly negative</b> examples, it wrongly flags <b>${c.FP}</b> (FPR = ${c.FP}/${c.N} = ${f2(fpr)}) and correctly clears <b>${c.TN}</b> (TNR = ${f2(tnr)}).<br>
+    <span class="muted">Move τ left and you flag more of everything: TPR and FPR both rise.</span>`;
+  $('#aucV').textContent=f3(Phi(lab.d/Math.SQRT2));
+  $('#eerV').textContent=f3(1-Phi(lab.d/2));
+  const r=ratesAt(lab.t); $('#ptV').textContent=`(${f2(r.fpr)}, ${f2(r.tpr)})`;
+  const logit=Math.log(lab.prev/(1-lab.prev))+lab.d*lab.t;
+  const c2=Math.exp(lab.lc);
+  $('#probEq').textContent=`At ${pct(lab.prev)} positives, τ = ${f2(lab.t)} is the same rule as "predict 1 when p(y=1|x) ≥ ${f2(sigmoid(logit))}". Cost-optimal cutoff: 1/(1+${c2.toFixed(2)}) = ${f2(1/(1+c2))}.`;
+}
+
+function updateLab(){
+  $('#tSlider').value=lab.t; $('#dSlider').value=lab.d; $('#pSlider').value=lab.prev; $('#cSlider').value=lab.lc;
+  $('#tVal').textContent=f2(lab.t); $('#dVal').textContent=lab.d.toFixed(2)+(lab.d===0?' (guessing)':'');
+  $('#pVal').textContent=pct(lab.prev); $('#cVal').textContent=Math.exp(lab.lc).toFixed(2);
+  drawDist(); drawRoc(); drawLabCm();
+}
+$('#tSlider').addEventListener('input',e=>{lab.t=+e.target.value;updateLab();});
+$('#dSlider').addEventListener('input',e=>{lab.d=+e.target.value;updateLab();});
+$('#pSlider').addEventListener('input',e=>{lab.prev=+e.target.value;updateLab();});
+$('#cSlider').addEventListener('input',e=>{lab.lc=+e.target.value;updateLab();});
+$('#snapBayes').addEventListener('click',()=>{lab.t=Math.round(bayesT()*100)/100;updateLab();});
+$('#snapEer').addEventListener('click',()=>{lab.t=0;updateLab();});
+function dragger(svg, onPt){
+  let on=false;
+  svg.addEventListener('pointerdown',e=>{on=true; svg.setPointerCapture(e.pointerId); onPt(svgPoint(svg,e));});
+  svg.addEventListener('pointermove',e=>{ if(on) onPt(svgPoint(svg,e)); });
+  const stop=()=>on=false; svg.addEventListener('pointerup',stop); svg.addEventListener('pointercancel',stop);
+}
+dragger($('#dist'),p=>{ lab.t=Math.round(clamp(invx(p.x),LO,HI)*100)/100; updateLab(); });
+dragger($('#roc'),p=>{ const s=$('#roc'), X=s._X, Y=s._Y; let best=null,bd=1e9;
+  for(const q of s._pts){ if(q[2]>HI||q[2]<LO) continue; const dd=(X(q[0])-p.x)**2+(Y(q[1])-p.y)**2; if(dd<bd){bd=dd;best=q;} }
+  if(best){ lab.t=Math.round(best[2]*100)/100; updateLab(); } });
+updateLab();
+
+/* ================= 2. BY HAND ================= */
+const hand={data:[],k:0,timer:null};
+const DEFAULT=[{s:.95,y:1},{s:.88,y:1},{s:.80,y:0},{s:.72,y:1},{s:.65,y:1},{s:.55,y:0},{s:.47,y:1},{s:.38,y:0},{s:.25,y:0},{s:.12,y:0}];
+function gauss(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+const ri=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+function randomSet(n=10){ const P=ri(3,n-3), used=new Set(), arr=[];
+  for(let i=0;i<n;i++){ const y=i<P?1:0; let s; do{ s=Math.round(clamp((y?.64:.38)+gauss()*.19,.02,.98)*100)/100; }while(used.has(s)); used.add(s); arr.push({s,y}); }
+  return arr.sort((a,b)=>b.s-a.s); }
+function setData(a){ stopPlay(); hand.data=a.slice().sort((x,y)=>y.s-x.s); hand.k=0; renderHand(); }
+function handPts(){ const D=hand.data,P=D.filter(e=>e.y).length,N=D.length-P; let tp=0,fp=0; const pts=[{tp,fp,f:0,t:0}];
+  D.forEach(e=>{ e.y?tp++:fp++; pts.push({tp,fp,f:fp/N,t:tp/P}); }); return {pts,P,N}; }
+function renderHand(){
+  const D=hand.data,k=hand.k,{pts,P,N}=handPts(),cur=pts[k], n=D.length;
+  // strip
+  const s=$('#strip'); s.innerHTML='';
+  const L=20,R=20,W=640, X=v=>L+v*(W-L-R), ay=72;
+  el('line',{x1:X(0),x2:X(1),y1:ay,y2:ay,class:'ax'},s);
+  for(let i=0;i<=4;i++){ const v=i/4; el('line',{x1:X(v),x2:X(v),y1:ay,y2:ay+4,class:'ax'},s); el('text',{x:X(v),y:ay+17,class:'tick mid'},s,v.toFixed(2)); }
+  el('text',{x:X(1),y:ay+31,class:'tick end'},s,'score p(y=1|x) →');
+  const lx = k===0 ? X((1+D[0].s)/2) : k===n ? X(D[n-1].s/2) : X((D[k-1].s+D[k].s)/2);
+  el('rect',{x:lx,y:8,width:X(1)-lx+6,height:ay-8,fill:'currentColor',style:'color:var(--ink);opacity:.05'},s);
+  D.forEach((e,i)=>{ const on=i<k; el('circle',{cx:X(e.s),cy:i%2?32:52,r:8,class:(e.y?'sdot-pos':'sdot-neg')+(on?'':' off')},s); });
+  el('line',{x1:lx,x2:lx,y1:4,y2:ay,class:'thr'},s);
+  el('text',{x:lx+6,y:16,class:'tick'},s,'predict 1 →');
+  el('text',{x:lx-6,y:16,class:'tick end'},s,'← predict 0');
+  // table
+  $('#hTau').innerHTML = k===0 ? 'τ is above every score, so nothing is predicted positive' : `τ = ${f2(D[k-1].s)} &nbsp;<span class="muted" style="font-size:.85rem">predict 1 if score ≥ τ</span>`;
+  let h='<thead><tr><th>Rank</th><th>Score</th><th>Truth</th><th>Predicted</th><th>Outcome</th></tr></thead><tbody>';
+  D.forEach((e,i)=>{ const pr=i<k?1:0, out=pr?(e.y?'TP':'FP'):(e.y?'FN':'TN');
+    h+=`<tr class="${pr?'on':''} ${i===k-1?'new':''}"><td class="mono">${i+1}</td><td class="mono">${f2(e.s)}</td><td><span class="chip ${e.y?'ch-pos':'ch-neg'}">${e.y}</span></td><td class="mono">${pr}</td><td><span class="chip ch-${out}">${out}</span></td></tr>`; });
+  $('#hTable').innerHTML=h+'</tbody>';
+  // explain
+  let ex;
+  if(k===0) ex=`Start: with τ above the highest score, the classifier says "negative" for all ${n} examples. TP = 0 and FP = 0, so the first ROC point is <b>(0, 0)</b>. There are P = ${P} positives and N = ${N} negatives, so every step will be <b class="pos">up by 1/${P} = ${f2(1/P)}</b> or <b class="neg">right by 1/${N} = ${f2(1/N)}</b>.`;
+  else { const e=D[k-1], prev=pts[k-1];
+    ex = e.y ? `Lowering τ to ${f2(e.s)} flips example #${k} (truly <b class="pos">positive</b>) to predicted positive. TP goes ${prev.tp} → ${cur.tp}, so TPR = ${cur.tp}/${P} = ${f2(cur.t)}. The curve steps <b class="pos">up</b>.`
+             : `Lowering τ to ${f2(e.s)} flips example #${k} (truly <b class="neg">negative</b>) to predicted positive. That is a false alarm: FP goes ${prev.fp} → ${cur.fp}, so FPR = ${cur.fp}/${N} = ${f2(cur.f)}. The curve steps <b class="neg">right</b>.`;
+    if(k===n) ex+=` Every example is now predicted positive, so we end at <b>(1, 1)</b>.`; }
+  $('#hExplain').innerHTML=ex;
+  // roc
+  const r=$('#hRoc'); r.innerHTML=''; const {X:RX,Y:RY}=rocFrame(r);
+  let gp=''; pts.forEach((q,i)=>gp+=(i?'L':'M')+RX(q.f)+','+RY(q.t)); el('path',{d:gp,class:'stair-ghost'},r);
+  let p=''; pts.slice(0,k+1).forEach((q,i)=>p+=(i?'L':'M')+RX(q.f)+','+RY(q.t));
+  if(k===n) el('path',{d:p+`L${RX(1)},${RY(0)}L${RX(0)},${RY(0)}Z`,class:'auc'},r);
+  el('path',{d:p,class:'stair'},r);
+  pts.slice(0,k+1).forEach((q,i)=>el('circle',{cx:RX(q.f),cy:RY(q.t),r:i===k?7:3.5,class:i===k?'dot-cur':'stair-pt'},r));
+  // counts
+  let auc=0; for(let i=1;i<pts.length;i++) auc+=(pts[i].f-pts[i-1].f)*pts[i].t;
+  let pairs=0; D.forEach(a=>{ if(a.y) D.forEach(b=>{ if(!b.y && b.s<a.s) pairs++; }); });
+  $('#hCounts').innerHTML=`<div class="mono" style="font-size:.9rem">TP = ${cur.tp}, FN = ${P-cur.tp}, FP = ${cur.fp}, TN = ${N-cur.fp}</div>
+    <div class="mono" style="font-size:.9rem"><span class="neg">FPR = ${cur.fp}/${N} = ${f2(cur.f)}</span> &nbsp; <span class="pos">TPR = ${cur.tp}/${P} = ${f2(cur.t)}</span></div>
+    ${k===n?`<div class="callout">Done. <b>AUC = ${f2(auc)}</b>, the shaded area. It also equals the fraction of (positive, negative) pairs the classifier ranks correctly: ${pairs} of ${P}×${N} = ${P*N} pairs have the positive scored higher, and ${pairs}/${P*N} = ${f2(pairs/(P*N))}.</div>`:'<div class="note">Keep stepping to finish the curve and see its AUC.</div>'}`;
+  $('#hBack').disabled=k===0; $('#hNext').disabled=k===n;
+}
+function stopPlay(){ if(hand.timer){clearInterval(hand.timer);hand.timer=null;$('#hPlay').textContent='Play all';} }
+$('#hNext').addEventListener('click',()=>{stopPlay(); if(hand.k<hand.data.length){hand.k++;renderHand();}});
+$('#hBack').addEventListener('click',()=>{stopPlay(); if(hand.k>0){hand.k--;renderHand();}});
+$('#hReset').addEventListener('click',()=>{stopPlay();hand.k=0;renderHand();});
+$('#hRand').addEventListener('click',()=>setData(randomSet()));
+$('#hPlay').addEventListener('click',()=>{ if(hand.timer){stopPlay();return;} if(hand.k===hand.data.length) hand.k=0;
+  $('#hPlay').textContent='Pause'; renderHand();
+  hand.timer=setInterval(()=>{ if(hand.k>=hand.data.length){stopPlay();return;} hand.k++; renderHand(); },800); });
+setData(DEFAULT);
+
+/* ================= 3. DECODER ================= */
+const DC={TN:72,FP:8,FN:6,TP:14};
+const DEC={
+  TPR:{num:'TP',den:'row1',full:'True positive rate',q:'Of everyone who is truly positive, what fraction did we flag as positive?',alias:['Sensitivity','Recall','Hit rate','p(ŷ=1 | y=1)'],cls:'pos',
+       more:'The y-axis of the ROC curve. Lowering τ raises it. You want it high.'},
+  FNR:{num:'FN',den:'row1',full:'False negative rate',q:'Of everyone who is truly positive, what fraction did we miss?',alias:['Miss rate','Type II error rate','p(ŷ=0 | y=1)','= 1 − TPR'],cls:'pos',
+       more:'Same row as TPR, so FNR = 1 − TPR. Lowering τ reduces it. You want it low.'},
+  FPR:{num:'FP',den:'row0',full:'False positive rate',q:'Of everyone who is truly negative, what fraction did we wrongly flag?',alias:['Fallout','False alarm rate','Type I error rate','p(ŷ=1 | y=0)'],cls:'neg',
+       more:'The x-axis of the ROC curve. Lowering τ raises it. You want it low.'},
+  TNR:{num:'TN',den:'row0',full:'True negative rate',q:'Of everyone who is truly negative, what fraction did we correctly clear?',alias:['Specificity','p(ŷ=0 | y=0)','= 1 − FPR'],cls:'neg',
+       more:'Same row as FPR, so TNR = 1 − FPR. Raising τ raises it. You want it high.'},
+  Precision:{num:'TP',den:'col1',full:'Precision (for contrast)',q:'Of everyone we flagged as positive, what fraction truly is positive?',alias:['Positive predictive value (PPV)','p(y=1 | ŷ=1)','Table 5.5'],cls:'',
+       more:'Divides by a column, so it conditions on the prediction, not the truth. It changes when the share of positives changes, and it is not on the ROC curve.'}
+};
+let decSel='TPR';
+$('#decChips').innerHTML=Object.keys(DEC).map(k=>`<button type="button" data-k="${k}" aria-pressed="${k===decSel}">${k}</button>`).join('');
+$('#decChips').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; decSel=b.dataset.k;
+  document.querySelectorAll('#decChips button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.k===decSel)); renderDec(); });
+function renderDec(){
+  const d=DEC[decSel];
+  const inDen=cell=>({row0:['TN','FP'],row1:['FN','TP'],col1:['FP','TP']})[d.den].includes(cell);
+  const cls=cell=>`c c-${cell.toLowerCase()} ${cell===d.num?'num':''} ${inDen(cell)?'den':''}`;
+  const N=DC.TN+DC.FP, P=DC.FN+DC.TP;
+  $('#decCm').innerHTML=`
+   <div></div><div class="h ${d.den==='col1'?'':''}">Predicted 0</div><div class="h ${d.den==='col1'?'den':''}">Predicted 1</div><div class="h">Row sum</div>
+   <div class="h rh neg ${d.den==='row0'?'den':''}">Truth 0</div>
+   <div class="${cls('TN')}"><span class="nm">TN</span><span class="n">${DC.TN}</span></div>
+   <div class="${cls('FP')}"><span class="nm">FP</span><span class="n">${DC.FP}</span></div>
+   <div class="sum">N = ${N}</div>
+   <div class="h rh pos ${d.den==='row1'?'den':''}">Truth 1</div>
+   <div class="${cls('FN')}"><span class="nm">FN</span><span class="n">${DC.FN}</span></div>
+   <div class="${cls('TP')}"><span class="nm">TP</span><span class="n">${DC.TP}</span></div>
+   <div class="sum">P = ${P}</div>
+   <div></div><div class="sum" style="justify-content:center">N̂ = ${DC.TN+DC.FN}</div><div class="sum" style="justify-content:center">P̂ = ${DC.FP+DC.TP}</div><div></div>`;
+  const den = d.den==='row0'?['TN','FP']:d.den==='row1'?['FN','TP']:['FP','TP'];
+  const dv=DC[den[0]]+DC[den[1]], v=DC[d.num]/dv;
+  $('#decInfo').innerHTML=`
+   <h3 class="${d.cls}" style="font-weight:700">${decSel} · ${d.full}</h3>
+   <p>${d.q}</p>
+   <div class="formula"><span>${decSel} =</span>
+     <span class="frac"><span>${d.num}</span><span>${den[0]} + ${den[1]}</span></span><span>=</span>
+     <span class="frac"><span>${DC[d.num]}</span><span>${DC[den[0]]} + ${DC[den[1]]}</span></span><span>= <b>${f2(v)}</b></span></div>
+   <p class="note">Outlined cell: numerator. Bright cells: the ${d.den==='col1'?'column':'row'} in the denominator.</p>
+   <div class="alias">${d.alias.map(a=>`<span>${a}</span>`).join('')}</div>
+   <p class="note" style="color:var(--ink)">${d.more}</p>`;
+}
+renderDec();
+
+/* ================= 4. QUIZ ================= */
+const shuffle=a=>{ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+function randCm(){ return {TN:ri(40,90),FP:ri(5,30),FN:ri(4,25),TP:ri(20,70)}; }
+function miniCm(c){ return `<div class="mini-cm"><div></div><div class="h">Pred 0</div><div class="h">Pred 1</div>
+  <div class="h">Truth 0</div><div class="c-tn">TN ${c.TN}</div><div class="c-fp">FP ${c.FP}</div>
+  <div class="h">Truth 1</div><div class="c-fn">FN ${c.FN}</div><div class="c-tp">TP ${c.TP}</div></div>`; }
+function numQ(build){ for(let tries=0;tries<50;tries++){ const q=build(); const vals=q.choices.map(c=>c.t); if(new Set(vals).size===vals.length) return q; } return build(); }
+const GENS=[
+  ()=>numQ(()=>{ const c=randCm(); return {html:`Using this confusion matrix, what is the <b>false positive rate</b>?<br><br>${miniCm(c)}`,
+    choices:[{t:f2(c.FP/(c.FP+c.TN)),ok:1},{t:f2(c.FP/(c.FP+c.TP))},{t:f2(c.TN/(c.FP+c.TN))},{t:f2(c.FP/(c.TN+c.FP+c.FN+c.TP))}],
+    exp:`FPR = FP / (FP + TN) = ${c.FP} / ${c.FP+c.TN} = ${f2(c.FP/(c.FP+c.TN))}. It divides by the <b>truth-0 row</b>, everyone truly negative. Dividing FP by the predicted-1 column (FP + TP) gives the false discovery rate instead.`}; }),
+  ()=>numQ(()=>{ const c=randCm(); return {html:`What is the <b>true positive rate</b> (sensitivity, recall)?<br><br>${miniCm(c)}`,
+    choices:[{t:f2(c.TP/(c.TP+c.FN)),ok:1},{t:f2(c.TP/(c.TP+c.FP))},{t:f2(c.FN/(c.TP+c.FN))},{t:f2((c.TP+c.TN)/(c.TN+c.FP+c.FN+c.TP))}],
+    exp:`TPR = TP / (TP + FN) = ${c.TP} / ${c.TP+c.FN} = ${f2(c.TP/(c.TP+c.FN))}. Divide by the <b>truth-1 row</b>. TP / (TP + FP) is precision, and (TP + TN) / total is accuracy.`}; }),
+  ()=>numQ(()=>{ const c=randCm(); return {html:`What is the <b>specificity</b> (true negative rate)?<br><br>${miniCm(c)}`,
+    choices:[{t:f2(c.TN/(c.TN+c.FP)),ok:1},{t:f2(c.TN/(c.TN+c.FN))},{t:f2(c.FP/(c.TN+c.FP))},{t:f2(c.TP/(c.TP+c.FN))}],
+    exp:`TNR = TN / (TN + FP) = ${c.TN} / ${c.TN+c.FP} = ${f2(c.TN/(c.TN+c.FP))}, which is 1 − FPR. TN / (TN + FN) divides by a column and gives the negative predictive value.`}; }),
+  ()=>numQ(()=>{ const tpr=ri(60,95)/100, fpr=ri(3,30)/100; return {html:`A classifier has TPR = ${f2(tpr)} and FPR = ${f2(fpr)}. What is its <b>false negative rate</b>?`,
+    choices:[{t:f2(1-tpr),ok:1},{t:f2(1-fpr)},{t:f2(fpr)},{t:f2(tpr-fpr)}],
+    exp:`TPR and FNR share the truth-1 row, so they add to 1: FNR = 1 − ${f2(tpr)} = ${f2(1-tpr)}. FPR comes from the other row and tells you nothing about FNR.`}; }),
+  ()=>({html:`You <b>lower</b> the threshold τ, so the classifier predicts "positive" more often. What happens to TPR and FPR?`,
+    choices:[{t:'Both go up (or stay the same)',ok:1},{t:'TPR goes up, FPR goes down'},{t:'TPR goes down, FPR goes up'},{t:'Both go down'}],
+    exp:`Lowering τ moves examples from "predicted 0" to "predicted 1" in <i>both</i> rows. More true positives and more false positives, so you move up and to the right along the ROC curve. Try it with the slider in Experiment 1.`}),
+  ()=>({html:`Which point on an ROC curve corresponds to a classifier that predicts <b>positive for every example</b>?`,
+    choices:[{t:'(FPR, TPR) = (1, 1)',ok:1},{t:'(0, 0)'},{t:'(0, 1)'},{t:'(1, 0)'}],
+    exp:`Calling everything positive catches every positive (TPR = 1) and flags every negative (FPR = 1). The opposite extreme, calling everything negative, is (0, 0). The perfect classifier sits at (0, 1).`}),
+  ()=>({html:`A classifier assigns scores at random, unrelated to the true label. What does its ROC curve look like?`,
+    choices:[{t:'The diagonal TPR = FPR, with AUC ≈ 0.5',ok:1},{t:'A horizontal line at TPR = 0.5, with AUC = 0.5'},{t:'A point at (0.5, 0.5), with AUC = 0'},{t:'The anti-diagonal from (0, 1) to (1, 0), with AUC = 0.5'}],
+    exp:`If scores ignore the label, any threshold flags the same fraction of positives as of negatives, so TPR = FPR. The area under that diagonal is 0.5. Set "class separation" to 0 in Experiment 1 to see it.`}),
+  ()=>{ const svg=`<svg viewBox="0 0 340 340" class="qvis" id="qsvg"></svg>`; return {html:`Two systems are tested on the same data. Which is better, and why?<br><br>${svg}`, after:drawQ8,
+    choices:[{t:'A: at every FPR it achieves a higher TPR',ok:1},{t:'B: its curve is closer to the diagonal, so it is more balanced'},{t:'B: it has a lower TPR, so it makes fewer mistakes'},{t:'You cannot tell without knowing the threshold'}],
+    exp:`A's curve lies above B's everywhere, so for any false alarm rate you pick, A catches more positives. A has the larger AUC. A curve near the diagonal is close to random guessing.`}; },
+  ()=>numQ(()=>{ const n=8, P=ri(3,5); const used=new Set(), D=[];
+    for(let i=0;i<n;i++){ const y=i<P?1:0; let s; do{ s=Math.round(clamp((y?.65:.38)+gauss()*.2,.03,.97)*100)/100; }while(used.has(s)); used.add(s); D.push({s,y}); }
+    D.sort((a,b)=>b.s-a.s); const k=ri(3,5), tau=D[k-1].s; const N=n-P;
+    let tp=0,fp=0; D.slice(0,k).forEach(e=>e.y?tp++:fp++);
+    const list=D.map(e=>`<span class="${e.y?'ch-pos':'ch-neg'}">${f2(e.s)} · y=${e.y}</span>`).join('');
+    const pr = tp+fp? tp/(tp+fp):0;
+    return {html:`Eight test examples, sorted by score. With the rule "predict 1 if score ≥ ${f2(tau)}", which ROC point (FPR, TPR) do you get?<br><br><div class="qlist">${list}</div>`,
+      choices:[{t:`(${f2(fp/N)}, ${f2(tp/P)})`,ok:1},{t:`(${f2(tp/P)}, ${f2(fp/N)})`},{t:`(${f2(fp/n)}, ${f2(tp/n)})`},{t:`(${f2(1-pr)}, ${f2(tp/P)})`}],
+      exp:`The top ${k} examples are predicted 1. Among them, ${tp} are truly positive (TP) and ${fp} are truly negative (FP). There are P = ${P} positives and N = ${N} negatives, so FPR = ${fp}/${N} = ${f2(fp/N)} and TPR = ${tp}/${P} = ${f2(tp/P)}. FPR goes on the x-axis, and each rate divides by its own class size, not by all ${n}.`}; }),
+  ()=>({html:`You evaluate a classifier, then add more <b>negative</b> examples to the test set so that there are twice as many, drawn from the same distribution. What happens to the ROC curve?`,
+    choices:[{t:'It stays the same (apart from sampling noise)',ok:1},{t:'It shifts right, because there are more false positives'},{t:'It shifts down, because positives are now rarer'},{t:'AUC is cut in half'}],
+    exp:`TPR and FPR are each computed within one true class. Doubling the negatives doubles FP and TN together, so FPR = FP/N doesn't change. This is why ROC curves don't depend on class balance. Precision does depend on it, since it mixes the two rows.`}),
+  ()=>({html:`The <b>equal error rate (EER)</b> is…`,
+    choices:[{t:'The error rate where FPR = FNR, where the ROC curve crosses the line from (0, 1) to (1, 0)',ok:1},{t:'The point where TPR = FPR, on the diagonal'},{t:'The area under the curve, divided by 2'},{t:'The threshold with the highest accuracy'}],
+    exp:`EER is where the two kinds of error balance: FPR = FNR = 1 − TPR. Points with TPR = 1 − FPR lie on the line from the top left (0, 1) to the bottom right (1, 0). Lower EER is better, and 0 is perfect.`}),
+  ()=>numQ(()=>{ const c=[2,3,4,9,19][ri(0,4)]; return {html:`A missed disease (false negative) costs <b>${c}×</b> as much as a false alarm (false positive). Using the Bayes decision rule, predict "positive" when p(y = 1 | x) is at least…`,
+    choices:[{t:`1/(1+${c}) = ${f2(1/(1+c))}`,ok:1},{t:`${c}/(1+${c}) = ${f2(c/(1+c))}`},{t:'0.50'},{t:`1/${c} = ${f2(1/c)}`}],
+    exp:`From eq. 5.10 with ℓ<sub>10</sub> = c·ℓ<sub>01</sub>: predict 0 only when p₁ < 1/(1 + c). Misses are expensive, so the bar for saying "positive" drops below 0.5 to ${f2(1/(1+c))}. That picks one specific point on the ROC curve.`}; }),
+  ()=>({html:`"Miss rate" and "Type II error rate" are other names for which quantity?`,
+    choices:[{t:'FNR = FN / (FN + TP)',ok:1},{t:'FPR = FP / (FP + TN)'},{t:'TNR = TN / (TN + FP)'},{t:'FDR = FP / (FP + TP)'}],
+    exp:`A miss is a positive you failed to flag, so FNR. Type I error (false alarm, fallout) is FPR. Sensitivity, recall and hit rate are TPR. Specificity is TNR.`}),
+];
+function drawQ8(){ const s=document.getElementById('qsvg'); if(!s) return; const {X,Y}=rocFrame(s,{noChanceLabel:true});
+  const curve=(fn,cls)=>{ let p=''; for(let i=0;i<=60;i++){ const x=i/60; p+=(i?'L':'M')+X(x)+','+Y(fn(x)); } el('path',{d:p,class:cls,style:'fill:none;stroke-width:2.5'},s); };
+  curve(x=>1-Math.pow(1-x,5),'l-pos'); curve(x=>1-Math.pow(1-x,1.7),'l-neg');
+  el('text',{x:X(.12),y:Y(.86),class:'lbl-pos'},s,'A'); el('text',{x:X(.34),y:Y(.42),class:'lbl-neg'},s,'B'); }
+const quiz={qs:[],i:0,ans:[]};
+function newQuiz(){ quiz.qs=GENS.map(g=>{ const q=g(); q.choices=shuffle(q.choices.slice()); return q; }); quiz.i=0; quiz.ans=quiz.qs.map(()=>null); renderQuiz(); }
+function renderQuiz(){
+  const box=$('#quizBox'), n=quiz.qs.length;
+  const prog=`<div class="qprog" aria-hidden="true">${quiz.qs.map((q,i)=>`<span class="${quiz.ans[i]==null?(i===quiz.i?'cur':''):(q.choices[quiz.ans[i]].ok?'ok':'no')}"></span>`).join('')}</div>`;
+  if(quiz.i>=n){
+    const score=quiz.qs.filter((q,i)=>q.choices[quiz.ans[i]].ok).length;
+    const msg = score===n?'Perfect. You have this chapter down.':score>=n-2?'Strong. Look over the ones you missed below.':score>=n/2?'Good start. Revisit Experiments 2 and 3, then try a new set.':'Worth another pass through the experiments above, then try a new set.';
+    box.innerHTML=`${prog}<div class="eyebrow">Result</div><div class="score-big">${score} / ${n}</div><p>${msg}</p>
+      <div class="review">${quiz.qs.map((q,i)=>{ const ok=q.choices[quiz.ans[i]].ok; const plain=q.html.replace(/<br>[\s\S]*$/,'').replace(/<[^>]+>/g,''); return `<div><span class="m" style="color:var(--${ok?'good':'bad'})">${ok?'✓':'✗'}</span><span>${plain}</span></div>`; }).join('')}</div>
+      <div class="row"><button type="button" id="qNew">Try a new set</button></div>`;
+    $('#qNew').onclick=newQuiz; return;
+  }
+  const q=quiz.qs[quiz.i], a=quiz.ans[quiz.i];
+  box.innerHTML=`${prog}<div class="eyebrow">Question ${quiz.i+1} of ${n}</div><div class="qtext">${q.html}</div>
+    <div class="qchoices">${q.choices.map((c,j)=>`<button type="button" data-j="${j}" ${a!=null?'disabled':''} class="${a!=null?(c.ok?'right':(j===a?'wrong':'')):''}">${c.t}</button>`).join('')}</div>
+    ${a!=null?`<div class="qfb"><strong class="${q.choices[a].ok?'ok':'no'}">${q.choices[a].ok?'Correct.':'Not quite.'}</strong> ${q.exp}</div>`:''}
+    <div class="row">${quiz.i>0?'<button type="button" class="ghost" id="qPrev">◀ Previous</button>':''}${a!=null?`<button type="button" id="qNext">${quiz.i===n-1?'See results':'Next question ▶'}</button>`:''}<button type="button" class="ghost" id="qNew2">New set</button></div>`;
+  if(q.after) q.after();
+  box.querySelectorAll('.qchoices button').forEach(b=>b.onclick=()=>{ quiz.ans[quiz.i]=+b.dataset.j; renderQuiz(); });
+  const nx=$('#qNext'); if(nx) nx.onclick=()=>{ quiz.i++; renderQuiz(); if(quiz.i>=n) box.scrollIntoView({block:'start'}); };
+  const pv=$('#qPrev'); if(pv) pv.onclick=()=>{ quiz.i--; renderQuiz(); };
+  $('#qNew2').onclick=newQuiz;
+}
+newQuiz();
+})();
+</script>
+</body>
+</html>
